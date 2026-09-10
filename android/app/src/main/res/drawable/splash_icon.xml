@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Animated GOSST logo shown on the Android 12+ native splash screen.
+     Loops so the motion keeps playing until the Flutter first frame appears. -->
+<animation-list xmlns:android="http://schemas.android.com/apk/res/android"
+    android:oneshot="false">
+    <item android:drawable="@drawable/splash_f01" android:duration="33" />
+    <item android:drawable="@drawable/splash_f02" android:duration="33" />
+    <item android:drawable="@drawable/splash_f03" android:duration="33" />
+    <item android:drawable="@drawable/splash_f04" android:duration="33" />
+    <item android:drawable="@drawable/splash_f05" android:duration="33" />
+    <item android:drawable="@drawable/splash_f06" android:duration="33" />
+    <item android:drawable="@drawable/splash_f07" android:duration="33" />
+    <item android:drawable="@drawable/splash_f08" android:duration="33" />
+    <item android:drawable="@drawable/splash_f09" android:duration="33" />
+    <item android:drawable="@drawable/splash_f10" android:duration="33" />
+    <item android:drawable="@drawable/splash_f11" android:duration="33" />
+    <item android:drawable="@drawable/splash_f12" android:duration="33" />
+    <item android:drawable="@drawable/splash_f13" android:duration="33" />
+    <item android:drawable="@drawable/splash_f14" android:duration="33" />
+    <item android:drawable="@drawable/splash_f15" android:duration="33" />
+    <item android:drawable="@drawable/splash_f16" android:duration="33" />
+    <item android:drawable="@drawable/splash_f17" android:duration="33" />
+    <item android:drawable="@drawable/splash_f18" android:duration="33" />
+    <item android:drawable="@drawable/splash_f19" android:duration="33" />
+    <item android:drawable="@drawable/splash_f20" android:duration="33" />
+    <item android:drawable="@drawable/splash_f21" android:duration="33" />
+    <item android:drawable="@drawable/splash_f22" android:duration="33" />
+    <item android:drawable="@drawable/splash_f23" android:duration="33" />
+    <item android:drawable="@drawable/splash_f24" android:duration="33" />
+    <item android:drawable="@drawable/splash_f25" android:duration="33" />
+    <item android:drawable="@drawable/splash_f26" android:duration="33" />
+    <item android:drawable="@drawable/splash_f27" android:duration="33" />
+    <item android:drawable="@drawable/splash_f28" android:duration="33" />
+    <item android:drawable="@drawable/splash_f29" android:duration="33" />
+    <item android:drawable="@drawable/splash_f30" android:duration="33" />
+    <item android:drawable="@drawable/splash_f31" android:duration="33" />
+    <item android:drawable="@drawable/splash_f32" android:duration="33" />
+    <item android:drawable="@drawable/splash_f33" android:duration="33" />
+    <item android:drawable="@drawable/splash_f34" android:duration="33" />
+    <item android:drawable="@drawable/splash_f35" android:duration="33" />
+    <item android:drawable="@drawable/splash_f36" android:duration="33" />
+    <item android:drawable="@drawable/splash_f37" android:duration="33" />
+    <item android:drawable="@drawable/splash_f38" android:duration="33" />
+    <item android:drawable="@drawable/splash_f39" android:duration="33" />
+    <item android:drawable="@drawable/splash_f40" android:duration="33" />
+    <item android:drawable="@drawable/splash_f41" android:duration="33" />
+    <item android:drawable="@drawable/splash_f42" android:duration="33" />
+    <item android:drawable="@drawable/splash_f43" android:duration="33" />
+    <item android:drawable="@drawable/splash_f44" android:duration="33" />
+    <item android:drawable="@drawable/splash_f45" android:duration="33" />
+    <item android:drawable="@drawable/splash_f46" android:duration="33" />
+</animation-list>

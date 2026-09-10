@@ -1,0 +1,57 @@
+=== GOSST — Store Listing Texts ===
+
+APP NAME
+EN: GOSST
+AR: جوست
+
+SHORT DESCRIPTION (max 80 chars)
+EN (70 chars):
+GOSST – B2B supplies, logistics & trade for HORECA and corporate sectors.
+AR:
+جوست – توريدات ولوجستيات وتجارة للفنادق والمطاعم والقطاع التجاري.
+
+FULL DESCRIPTION (EN)
+--------------------------------------------------
+GOSST is a one-stop business partner for companies and organizations in Egypt, connecting them to reliable supplies, trade, and logistics services — built specifically for the HORECA sector (hotels, restaurants, catering) and corporate customers.
+
+Why GOSST?
+• Request quotes in seconds. Browse the catalog, save items to your cart, and send a request directly to our management team.
+• Live price quotes. Our team reviews every request and replies with exact prices and tailored offers.
+• Supplies & Trade. Food, consumables, and general supplies sourced through verified channels.
+• Logistics & Transport. Freight, distribution, and delivery services coordinated by our operations team.
+• Everything in one place. Your requests, quotes, and history stay in sync.
+• Instant notifications. Be notified the moment a quote is ready or an order status changes.
+
+How it works:
+1. Explore the catalog or request a custom quote.
+2. Fill in the request form with your details.
+3. Send it — our team follows up with the offer.
+4. Confirm, and we arrange delivery to your location.
+
+GOSST is operated in Alexandria, Egypt.
+For support, contact us at Info@gossts.com.
+
+FULL DESCRIPTION (AR)
+--------------------------------------------------
+تطبيق جوست شريك أعمال متكامل للشركات والمؤسسات في مصر، يجمع بين التوريدات وخدمات التجارة واللوجستيات في مكان واحد — مخصص لقطاع الضيافة والفنادق والمطاعم (HORECA) والعملاء من الشركات.
+
+لماذا جوست؟
+• اطلب عروض أسعار في ثوانٍ. تصفح الكتالوج وأضف اختياراتك إلى السلة وأرسل الطلب مباشرة لفريق الإدارة.
+• عروض أسعار فورية. يراجع فريقنا كل طلب ويرد عليك بالأسعار والعروض المناسبة.
+• التوريدات والتجارة. مواد غذائية ومستلزمات وتموين من مصادر معتمدة.
+• اللوجستيات والنقل. شحن وتوزيع وتوصيل بالتنسيق مع فريق العمليات.
+• كل شيء في مكان واحد. طلباتك وعروضك وسجلها في مزامنة دائمة.
+• إشعارات فورية. تصل للإشعار اللحظة التي يصبح عرضك جاهزًا أو يتغير حالة طلبك.
+
+كيف يعمل التطبيق:
+1. تصفح الكتالوج أو اطلب تسعيرة مخصصة.
+2. املأ نموذج الطلب ببياناتك.
+3. أرسله — ويتواصل فريقنا معك بالعرض.
+4. قم بالتأكيد ونرتب التوصيل لموقعك.
+
+يُدار تطبيق جوست من الإسكندرية، مصر.
+للدعم تواصل معنا عبر البريد: Info@gossts.com
+
+FEATURE GRAPHIC TAGLINE
+GOSST — Global Outsourcing Services Trading
+B2B Supplies | Logistics | Trade | HORECA

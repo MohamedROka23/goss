@@ -1,0 +1,21 @@
+node_modules
+dist
+.DS_Store
+*.local
+server/db.json
+*firebase-adminsdk*.json
+
+# Android signing (never commit secrets)
+android/key.properties
+android/app/*.jks
+android/app/*.jks.old
+android/app/*.keystore
+
+# Flutter / Dart build artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+.idea/
+*.iml
+*.log

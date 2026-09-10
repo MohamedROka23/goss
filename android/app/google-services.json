@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "463544126887",
+    "project_id": "gosst-9c2c6",
+    "storage_bucket": "gosst-9c2c6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:463544126887:android:9ebe108a99f02719e6ba82",
+        "android_client_info": {
+          "package_name": "com.gosst.goss"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCY_NPRujCYrzqAFQQNZB8YzKHvYU_mwPg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
