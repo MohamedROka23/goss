@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+
 import '../models/models.dart';
 import 'backend.dart';
 
@@ -10,11 +11,9 @@ import 'backend.dart';
 ///
 /// Uses collection names: products, requests, purchases, expenses, admins.
 /// Admin accounts are created in Firebase Authentication and mirrored in the
-/// `admins` collection (doc id = user uid). The email admin@gosst.com signed
+/// `admins` collection (doc id = user uid). The email admin@gossts.com signed
 /// in with the account UID listed in firestore.rules remains the master admin.
 class FirestoreBackend implements GossBackend {
-  static const _adminRegisterCode = 'GOSST@admin';
-
   @override
   BackendMode get mode => BackendMode.firebase;
   @override
@@ -32,7 +31,12 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
-  Future<void> addCategory(String token, String id, String en, String ar) async {
+  Future<void> addCategory(
+    String token,
+    String id,
+    String en,
+    String ar,
+  ) async {
     await _db.collection('categories').doc(id).set({
       'en': en,
       'ar': ar,
@@ -44,7 +48,9 @@ class FirestoreBackend implements GossBackend {
   @override
   Future<List<Product>> fetchProducts() async {
     final snap = await _db.collection('products').orderBy('createdAt').get();
-    return snap.docs.map((d) => Product.fromJson({...d.data(), 'id': d.id})).toList();
+    return snap.docs
+        .map((d) => Product.fromJson({...d.data(), 'id': d.id}))
+        .toList();
   }
 
   @override
@@ -53,7 +59,11 @@ class FirestoreBackend implements GossBackend {
         .collection('products')
         .orderBy('createdAt')
         .snapshots()
-        .map((snap) => snap.docs.map((d) => Product.fromJson({...d.data(), 'id': d.id})).toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => Product.fromJson({...d.data(), 'id': d.id}))
+              .toList(),
+        );
   }
 
   @override
@@ -66,6 +76,7 @@ class FirestoreBackend implements GossBackend {
         'unit': data['unit'] ?? 'unit',
         'price': (data['price'] as num?)?.toDouble() ?? 0,
         'costPrice': (data['costPrice'] as num?)?.toDouble() ?? 0,
+        'stock': (data['stock'] as num?)?.toDouble() ?? 0,
         'nameEn': data['nameEn'] ?? '',
         'nameAr': data['nameAr'] ?? '',
         'descEn': data['descEn'] ?? '',
@@ -80,6 +91,7 @@ class FirestoreBackend implements GossBackend {
         'unit': data['unit'] ?? 'unit',
         'price': (data['price'] as num?)?.toDouble() ?? 0,
         'costPrice': (data['costPrice'] as num?)?.toDouble() ?? 0,
+        'stock': (data['stock'] as num?)?.toDouble() ?? 0,
         'nameEn': data['nameEn'] ?? '',
         'nameAr': data['nameAr'] ?? '',
         'descEn': data['descEn'] ?? '',
@@ -93,6 +105,49 @@ class FirestoreBackend implements GossBackend {
   @override
   Future<void> deleteProduct(String token, String id) async {
     await _db.collection('products').doc(id).delete();
+  }
+
+  @override
+  Future<void> importProducts(
+    String token, {
+    required List<Map<String, dynamic>> categories,
+    required List<Map<String, dynamic>> products,
+  }) async {
+    final categoriesRef = _db.collection('categories');
+    final productsRef = _db.collection('products');
+
+    for (var i = 0; i < categories.length; i += 490) {
+      final batch = _db.batch();
+      var order = i;
+      for (final c in categories.skip(i).take(490)) {
+        batch.set(categoriesRef.doc(c['id'] as String), {
+          'en': c['en'] ?? '',
+          'ar': c['ar'] ?? '',
+          'order': DateTime.now().millisecondsSinceEpoch + order++,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+
+    for (var i = 0; i < products.length; i += 490) {
+      final batch = _db.batch();
+      for (final p in products.skip(i).take(490)) {
+        batch.set(productsRef.doc(p['id'] as String), {
+          'category': p['category'] ?? 'office',
+          'unit': p['unit'] ?? 'unit',
+          'price': (p['price'] as num?)?.toDouble() ?? 0,
+          'costPrice': (p['costPrice'] as num?)?.toDouble() ?? 0,
+          'stock': (p['stock'] as num?)?.toDouble() ?? 0,
+          'nameEn': p['nameEn'] ?? '',
+          'nameAr': p['nameAr'] ?? '',
+          'descEn': p['descEn'] ?? '',
+          'descAr': p['descAr'] ?? '',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
   }
 
   @override
@@ -117,18 +172,62 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
-  Future<void> registerAdmin(String name, String email, String password, String code) async {
-    if (code.trim().toLowerCase() != _adminRegisterCode.toLowerCase()) {
-      throw Exception('Invalid admin registration code');
+  Future<bool> verifyAdminCredentials(String email, String password) async {
+    try {
+      // Re-auth of the same team member: same identity, tokens refreshed, the
+      // app's in-memory session is left untouched on success.
+      await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> requestPasswordReset(String email) async {
+    try {
+      // Firebase sends its own recovery e-mail; this mirrors the generic
+      // response contract (no account enumeration even for unknown addresses).
+      await _auth.sendPasswordResetEmail(email: email.trim());
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> resetPassword(
+    String email,
+    String code,
+    String newPassword,
+  ) async {
+    // In Firebase mode the password reset is completed through the e-mailed
+    // link (the oobCode flow), not through an in-app token exchange.
+    return false;
+  }
+
+  @override
+  Future<void> registerAdmin(
+    String name,
+    String email,
+    String password,
+    String code,
+  ) async {
+    final regCode = code.trim();
+    if (regCode.isEmpty) {
+      throw Exception('Admin registration code is required');
     }
     try {
       final cred = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
-      // The register code is sent to Firestore only so the security rules can
-      // validate the self-registration; it is removed from the document right
-      // after the admin account is created.
+      // Self-registration is provisioning zero: the new team member is created
+      // as a bare delegate (no permissions) and a super admin grants access
+      // later through the team panel. Rules never trust a public register code.
       final doc = _db.collection('admins').doc(cred.user?.uid ?? '');
       await _writeAdminBootstrapDoc(doc, name, email);
     } on FirebaseAuthException catch (e) {
@@ -154,8 +253,9 @@ class FirestoreBackend implements GossBackend {
     }
   }
 
-  /// Writes the /admins/{uid} document including the register code (so the
-  /// security rules can validate a self-registration), then removes the code.
+  /// Writes the /admins/{uid} document as an UNPRIVILEGED delegate so no one
+  /// can self-register admin access (matches the Firestore rules). A super
+  /// admin later assigns the role and permissions through the team panel.
   Future<void> _writeAdminBootstrapDoc(
     DocumentReference<Map<String, dynamic>> doc,
     String name,
@@ -164,20 +264,23 @@ class FirestoreBackend implements GossBackend {
     await doc.set({
       'name': name,
       'email': email.trim(),
-      'role': 'admin',
-      'permissions': defaultPermissionsFor(AdminRole.admin),
+      'role': 'delegate',
+      'permissions': <String>[],
       'createdAt': FieldValue.serverTimestamp(),
-      'registerCode': _adminRegisterCode,
     });
-    try {
-      await doc.update({'registerCode': FieldValue.delete()});
-    } catch (_) {}
   }
 
   @override
-  Future<void> changeAdminPassword(String email, String oldPassword, String newPassword) async {
+  Future<void> changeAdminPassword(
+    String email,
+    String oldPassword,
+    String newPassword,
+  ) async {
     try {
-      await _auth.signInWithEmailAndPassword(email: email.trim(), password: oldPassword);
+      await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: oldPassword,
+      );
       await _auth.currentUser?.updatePassword(newPassword);
     } on FirebaseAuthException catch (e) {
       throw Exception(e.message ?? 'Password change failed');
@@ -293,8 +396,8 @@ class FirestoreBackend implements GossBackend {
     List<String>? permissions,
   }) async {
     await _db.collection('admins').doc(adminId).update({
-      if (role != null) 'role': role,
-      if (permissions != null) 'permissions': permissions,
+      'role': ?role,
+      'permissions': ?permissions,
     });
   }
 
@@ -326,8 +429,13 @@ class FirestoreBackend implements GossBackend {
 
   @override
   Future<List<CustomerRequest>> fetchRequests(String token) async {
-    final snap = await _db.collection('requests').orderBy('createdAt', descending: true).get();
-    return snap.docs.map((d) => CustomerRequest.fromJson({...d.data(), 'id': d.id})).toList();
+    final snap = await _db
+        .collection('requests')
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => CustomerRequest.fromJson({...d.data(), 'id': d.id}))
+        .toList();
   }
 
   @override
@@ -374,17 +482,25 @@ class FirestoreBackend implements GossBackend {
         .collection('requests')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => CustomerRequest.fromJson({...d.data(), 'id': d.id}))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => CustomerRequest.fromJson({...d.data(), 'id': d.id}))
+              .toList(),
+        );
   }
 
   @override
-  Future<void> updateRequestStatus(String token, String id, String status) async {
+  Future<void> updateRequestStatus(
+    String token,
+    String id,
+    String status,
+  ) async {
     final ref = _db.collection('requests').doc(id);
     final snap = await ref.get();
     final current = snap.data()?['status'] as String?;
-    if (current != null && RequestStatus.isFrozen(current) && current != status) {
+    if (current != null &&
+        RequestStatus.isFrozen(current) &&
+        current != status) {
       throw Exception('Order status is locked by the customer decision');
     }
     await ref.update({'status': status});
@@ -392,13 +508,21 @@ class FirestoreBackend implements GossBackend {
 
   @override
   Future<List<Purchase>> fetchPurchases(String token) async {
-    final snap = await _db.collection('purchases').orderBy('createdAt', descending: true).get();
-    return snap.docs.map((d) => Purchase.fromJson({...d.data(), 'id': d.id})).toList();
+    final snap = await _db
+        .collection('purchases')
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => Purchase.fromJson({...d.data(), 'id': d.id}))
+        .toList();
   }
 
   @override
   Future<List<PriceUpdateNotification>> fetchNotifications() async {
-    final snap = await _db.collection('notifications').orderBy('createdAt', descending: true).get();
+    final snap = await _db
+        .collection('notifications')
+        .orderBy('createdAt', descending: true)
+        .get();
     return snap.docs
         .map((d) => PriceUpdateNotification.fromJson({...d.data(), 'id': d.id}))
         .toList();
@@ -410,13 +534,21 @@ class FirestoreBackend implements GossBackend {
         .collection('notifications')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => PriceUpdateNotification.fromJson({...d.data(), 'id': d.id}))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map(
+                (d) =>
+                    PriceUpdateNotification.fromJson({...d.data(), 'id': d.id}),
+              )
+              .toList(),
+        );
   }
 
   @override
-  Future<void> sendPriceUpdateNotification(String token, Map<String, dynamic> data) async {
+  Future<void> sendPriceUpdateNotification(
+    String token,
+    Map<String, dynamic> data,
+  ) async {
     await _db.collection('notifications').add({
       'productId': data['productId'] ?? '',
       'productNameEn': data['productNameEn'] ?? '',
@@ -433,13 +565,15 @@ class FirestoreBackend implements GossBackend {
     final doc = _db.collection('purchases').doc();
     final qty = (data['qty'] as num?)?.toInt() ?? 0;
     final cost = (data['costPrice'] as num?)?.toDouble() ?? 0;
+    final vat = (data['vat'] as num?)?.toDouble() ?? 0;
     final payload = <String, dynamic>{
       'date': DateTime.now().toUtc().toIso8601String(),
       'supplier': data['supplier'] ?? '',
       'productId': data['productId'] ?? '',
       'qty': qty,
       'costPrice': cost,
-      'total': qty * cost,
+      'vat': vat,
+      'total': qty * cost + vat,
       'createdAt': FieldValue.serverTimestamp(),
     };
     await doc.set(payload);
@@ -447,16 +581,22 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
-  Future<Purchase> updatePurchase(String token, String id, Map<String, dynamic> data) async {
+  Future<Purchase> updatePurchase(
+    String token,
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final qty = (data['qty'] as num?)?.toInt() ?? 0;
+    final cost = (data['costPrice'] as num?)?.toDouble() ?? 0;
+    final vat = (data['vat'] as num?)?.toDouble() ?? 0;
     final payload = <String, dynamic>{
       'supplier': data['supplier'] ?? '',
       'productId': data['productId'] ?? '',
-      'qty': (data['qty'] as num?)?.toInt() ?? 0,
-      'costPrice': (data['costPrice'] as num?)?.toDouble() ?? 0,
+      'qty': qty,
+      'costPrice': cost,
+      'vat': vat,
+      'total': qty * cost + vat,
     };
-    final qty = (data['qty'] as num?)?.toInt() ?? 0;
-    final cost = (data['costPrice'] as num?)?.toDouble() ?? 0;
-    payload['total'] = qty * cost;
     await _db.collection('purchases').doc(id).update(payload);
     return Purchase.fromJson({...payload, 'id': id});
   }
@@ -468,8 +608,13 @@ class FirestoreBackend implements GossBackend {
 
   @override
   Future<List<Expense>> fetchExpenses(String token) async {
-    final snap = await _db.collection('expenses').orderBy('createdAt', descending: true).get();
-    return snap.docs.map((d) => Expense.fromJson({...d.data(), 'id': d.id})).toList();
+    final snap = await _db
+        .collection('expenses')
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => Expense.fromJson({...d.data(), 'id': d.id}))
+        .toList();
   }
 
   @override
@@ -487,12 +632,20 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
-  Future<Expense> updateExpense(String token, String id, Map<String, dynamic> data) async {
+  Future<Expense> updateExpense(
+    String token,
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     final payload = <String, dynamic>{
-      if (data.containsKey('date')) 'date': data['date'] ?? DateTime.now().toIso8601String(),
-      if (data.containsKey('category')) 'category': data['category'] ?? 'General',
-      if (data.containsKey('description')) 'description': data['description'] ?? '',
-      if (data.containsKey('amount')) 'amount': (data['amount'] as num?)?.toDouble() ?? 0,
+      if (data.containsKey('date'))
+        'date': data['date'] ?? DateTime.now().toIso8601String(),
+      if (data.containsKey('category'))
+        'category': data['category'] ?? 'General',
+      if (data.containsKey('description'))
+        'description': data['description'] ?? '',
+      if (data.containsKey('amount'))
+        'amount': (data['amount'] as num?)?.toDouble() ?? 0,
     };
     await _db.collection('expenses').doc(id).update(payload);
     return Expense.fromJson({...payload, 'id': id});
@@ -501,5 +654,76 @@ class FirestoreBackend implements GossBackend {
   @override
   Future<void> deleteExpense(String token, String id) async {
     await _db.collection('expenses').doc(id).delete();
+  }
+
+  @override
+  Future<List<JournalEntry>> fetchJournal(String token) async {
+    final snap = await _db
+        .collection('journal')
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => JournalEntry.fromJson({...d.data(), 'id': d.id}))
+        .toList();
+  }
+
+  @override
+  Future<JournalEntry> saveJournalEntry(
+    String token,
+    Map<String, dynamic> data,
+  ) async {
+    final doc = _db.collection('journal').doc();
+    final payload = <String, dynamic>{
+      'date': data['date'] ?? DateTime.now().toIso8601String(),
+      'memo': data['memo'] ?? '',
+      'debits': (data['debits'] as List<dynamic>? ?? [])
+          .map((l) => (l as Map).cast<String, dynamic>())
+          .toList(),
+      'credits': (data['credits'] as List<dynamic>? ?? [])
+          .map((l) => (l as Map).cast<String, dynamic>())
+          .toList(),
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+    await doc.set(payload);
+    return JournalEntry.fromJson({...payload, 'id': doc.id});
+  }
+
+  @override
+  Future<void> deleteJournalEntry(String token, String id) async {
+    await _db.collection('journal').doc(id).delete();
+  }
+
+  @override
+  Future<List<Payment>> fetchPayments(String token) async {
+    final snap = await _db
+        .collection('payments')
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => Payment.fromJson({...d.data(), 'id': d.id}))
+        .toList();
+  }
+
+  @override
+  Future<Payment> savePayment(String token, Map<String, dynamic> data) async {
+    final doc = _db.collection('payments').doc();
+    final payload = <String, dynamic>{
+      'requestId': data['requestId'] ?? '',
+      'customerId': data['customerId'] ?? '',
+      'company': data['company'] ?? '',
+      'name': data['name'] ?? '',
+      'date': data['date'] ?? DateTime.now().toIso8601String(),
+      'amount': (data['amount'] as num?)?.toDouble() ?? 0,
+      'method': data['method'] ?? 'cash',
+      'note': data['note'] ?? '',
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+    await doc.set(payload);
+    return Payment.fromJson({...payload, 'id': doc.id});
+  }
+
+  @override
+  Future<void> deletePayment(String token, String id) async {
+    await _db.collection('payments').doc(id).delete();
   }
 }

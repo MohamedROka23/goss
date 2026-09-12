@@ -43,5 +43,5 @@
 
 ## ملاحظات
 - النمط سحابي بالكامل (Firebase/Cloud)، لا يحتاج خادماً محلياً بإطلاق.
-- دخول الأدمن `info@gosst.com / 123456` يعمل على iOS كما في Android.
+- دخول الأدمن `info@gossts.com / 123456` يعمل على iOS كما في Android.
 - هوية العميل: Anonymous Auth (مفعّل من قبل على `gosst-9c2c6`).

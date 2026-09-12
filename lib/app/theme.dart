@@ -11,6 +11,7 @@ class GossColors {
   static const red = Color(0xFFD21F26);
   static const blue = Color(0xFF1D6FBF);
   static const green = Color(0xFF1F8A4C);
+  static const amber = Color(0xFFF0A500);
   static const darkBg = Color(0xFF08162B);
   static const darkSurface = Color(0xFF0E2140);
   static const darkCard = Color(0xFF12274A);

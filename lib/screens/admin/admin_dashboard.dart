@@ -1,17 +1,23 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/admin_provider.dart';
 import '../../app/theme.dart';
 import '../../models/models.dart';
+import '../../services/notification_watcher.dart';
 import 'admin_quotes_tab.dart';
 import 'admin_purchases_tab.dart';
 import 'admin_profit_tab.dart';
-import 'admin_expenses_tab.dart';
 import 'admin_requests_tab.dart';
 import 'admin_team_tab.dart';
 import 'admin_customers_tab.dart';
 import 'admin_tracking_tab.dart';
+import 'admin_chat_tab.dart';
+import 'accounting/admin_accounting_tab.dart';
+import 'admin_settings_tab.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -33,8 +39,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
         admin.loadRequests(app.token!);
         admin.loadExpenses(app.token!);
         admin.loadPurchases(app.token!);
+        admin.loadJournal(app.token!);
+        admin.loadPayments(app.token!);
         admin.startWatchingRequests(app.token!);
         app.resolveCurrentAdmin();
+        // Team-side notification watcher: new requests + chat messages.
+        String uid = '';
+        try {
+          uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+        } catch (_) {
+          // Firebase not initialized (e.g. widget tests without a backend).
+        }
+        if (uid.isNotEmpty) {
+          unawaited(NotificationWatcher.instance.startAdmin(uid));
+        }
       }
     });
   }
@@ -57,9 +75,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       (AdminPerms.quotes, _Tab(title: en ? 'Quotes' : '\u0639\u0631\u0648\u0636', icon: Icons.storefront_outlined), const AdminQuotesTab()),
       (AdminPerms.purchases, _Tab(title: en ? 'Purchasing' : '\u0627\u0644\u0634\u0631\u0627\u0621', icon: Icons.shopping_cart_outlined), const AdminPurchasesTab()),
       (AdminPerms.profit, _Tab(title: en ? 'Profit' : '\u0627\u0644\u0631\u0628\u062d', icon: Icons.trending_up), const AdminProfitTab()),
-      (AdminPerms.expenses, _Tab(title: en ? 'Expenses' : '\u0627\u0644\u0645\u0635\u0627\u0631\u064a\u0641', icon: Icons.payments_outlined), const AdminExpensesTab()),
+      (AdminPerms.accounting, _Tab(title: en ? 'Accounting' : '\u0627\u0644\u0645\u062d\u0627\u0633\u0628\u0629', icon: Icons.account_balance_outlined), AdminAccountingTab(onBack: () => _select(0, null))),
       (AdminPerms.team, _Tab(title: en ? 'Admins' : '\u0627\u0644\u0641\u0631\u064a\u0642', icon: Icons.group_outlined), const AdminTeamTab()),
+      (AdminPerms.chat, _Tab(title: en ? 'Support' : '\u0627\u0644\u062f\u0639\u0645', icon: Icons.headset_mic_outlined), const AdminChatTab()),
     ].where((t) => app.can(t.$1)).toList();
+
+    tabs.add(('settings', _Tab(title: en ? 'Settings' : '\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a', icon: Icons.settings_outlined), const AdminSettingsTab()));
 
     if (_tab >= tabs.length) _tab = tabs.isEmpty ? 0 : tabs.length - 1;
 
@@ -132,6 +153,36 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Column(
       children: [
         _AdminSlider(chips: chips),
+        if (admin.lastError != null) ...[
+          Material(
+            color: GossColors.red.withValues(alpha: 0.06),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.cloud_off_outlined, size: 16, color: GossColors.red),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      admin.lastError!,
+                      style: const TextStyle(fontSize: 12, color: GossColors.red),
+                    ),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    onPressed: () async {
+                      if (app.token == null) return;
+                      await admin.reloadAll(app.token!);
+                      await app.loadAdmins();
+                      await app.resolveCurrentAdmin();
+                    },
+                    child: Text(en ? 'Retry' : '\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         Expanded(child: tabs[_tab].$3),
       ],
     );

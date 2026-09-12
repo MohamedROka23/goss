@@ -14,10 +14,30 @@ class AdminProvider extends ChangeNotifier {
   List<Purchase> _purchases = [];
   List<Purchase> get purchases => _purchases;
 
+  List<JournalEntry> _journal = [];
+  List<JournalEntry> get journal => _journal;
+
+  List<Payment> _payments = [];
+  List<Payment> get payments => _payments;
+
   /// Test-only: inject requests without a backend.
   @visibleForTesting
   void seedRequests(List<CustomerRequest> requests) {
     _requests = requests;
+    notifyListeners();
+  }
+
+  /// Test-only: inject journal entries without a backend.
+  @visibleForTesting
+  void seedJournal(List<JournalEntry> entries) {
+    _journal = entries;
+    notifyListeners();
+  }
+
+  /// Test-only: inject payments without a backend.
+  @visibleForTesting
+  void seedPayments(List<Payment> payments) {
+    _payments = payments;
     notifyListeners();
   }
 
@@ -37,6 +57,14 @@ class AdminProvider extends ChangeNotifier {
 
   StreamSubscription? _requestSub;
   String _lastSeenRequestAt = '';
+  String? _lastError;
+  String? get lastError => _lastError;
+
+  void _setError(Object e) {
+    _lastError = 'Failed to load data. Check your connection and retry.';
+    debugPrint('AdminProvider load error: $e');
+    notifyListeners();
+  }
 
   @override
   void dispose() {
@@ -61,7 +89,21 @@ class AdminProvider extends ChangeNotifier {
         _requests = list;
         notifyListeners();
       });
-    } catch (_) {}
+      _lastError = null;
+    } catch (e) {
+      _setError(e);
+    }
+  }
+
+  /// Re-runs every admin data load (used by the error banner retry button).
+  Future<void> reloadAll(String token) async {
+    await Future.wait([
+      loadRequests(token),
+      loadExpenses(token),
+      loadPurchases(token),
+      loadJournal(token),
+      loadPayments(token),
+    ]);
   }
 
   /// Stops background subscriptions and clears admin-only data (on sign out).
@@ -71,6 +113,8 @@ class AdminProvider extends ChangeNotifier {
     _requests = [];
     _expenses = [];
     _purchases = [];
+    _journal = [];
+    _payments = [];
     notifyListeners();
   }
 
@@ -95,8 +139,11 @@ class AdminProvider extends ChangeNotifier {
     try {
       final backend = await BackendManager.resolve();
       _requests = await backend.fetchRequests(token);
+      _lastError = null;
       notifyListeners();
-    } catch (_) {}
+    } catch (e) {
+      _setError(e);
+    }
   }
 
   Future<void> updateRequestStatus(String token, String id, String status) async {
@@ -111,7 +158,10 @@ class AdminProvider extends ChangeNotifier {
     try {
       final backend = await BackendManager.resolve();
       await backend.updateRequestStatus(token, id, status);
-    } catch (_) {}
+      _lastError = null;
+    } catch (e) {
+      _setError(e);
+    }
     // Reconcile with the server so the UI never drifts from the stored state
     // when the live stream is slow or unavailable.
     await loadRequests(token);
@@ -131,8 +181,11 @@ class AdminProvider extends ChangeNotifier {
     try {
       final backend = await BackendManager.resolve();
       _expenses = await backend.fetchExpenses(token);
+      _lastError = null;
       notifyListeners();
-    } catch (_) {}
+    } catch (e) {
+      _setError(e);
+    }
   }
 
   Future<void> saveExpense(String token, Map<String, dynamic> data) async {
@@ -157,8 +210,11 @@ class AdminProvider extends ChangeNotifier {
     try {
       final backend = await BackendManager.resolve();
       _purchases = await backend.fetchPurchases(token);
+      _lastError = null;
       notifyListeners();
-    } catch (_) {}
+    } catch (e) {
+      _setError(e);
+    }
   }
 
   Future<void> savePurchase(String token, Map<String, dynamic> data) async {
@@ -178,6 +234,56 @@ class AdminProvider extends ChangeNotifier {
     await backend.deletePurchase(token, id);
     await loadPurchases(token);
   }
+
+  Future<void> loadJournal(String token) async {
+    try {
+      final backend = await BackendManager.resolve();
+      _journal = await backend.fetchJournal(token);
+      _lastError = null;
+      notifyListeners();
+    } catch (e) {
+      _setError(e);
+    }
+  }
+
+  Future<void> saveJournalEntry(String token, Map<String, dynamic> data) async {
+    final backend = await BackendManager.resolve();
+    await backend.saveJournalEntry(token, data);
+    await loadJournal(token);
+  }
+
+  Future<void> deleteJournalEntry(String token, String id) async {
+    final backend = await BackendManager.resolve();
+    await backend.deleteJournalEntry(token, id);
+    await loadJournal(token);
+  }
+
+  Future<void> loadPayments(String token) async {
+    try {
+      final backend = await BackendManager.resolve();
+      _payments = await backend.fetchPayments(token);
+      _lastError = null;
+      notifyListeners();
+    } catch (e) {
+      _setError(e);
+    }
+  }
+
+  Future<void> savePayment(String token, Map<String, dynamic> data) async {
+    final backend = await BackendManager.resolve();
+    await backend.savePayment(token, data);
+    await loadPayments(token);
+  }
+
+  Future<void> deletePayment(String token, String id) async {
+    final backend = await BackendManager.resolve();
+    await backend.deletePayment(token, id);
+    await loadPayments(token);
+  }
+
+  double get totalJournalDebit => _journal.fold(0.0, (n, e) => n + e.totalDebit);
+
+  double get totalPaymentsReceived => _payments.fold(0.0, (n, p) => n + p.amount);
 
   double get totalExpenses => _expenses.fold(0, (n, e) => n + e.amount);
   double get totalPurchases => _purchases.fold(0, (n, p) => n + p.total);

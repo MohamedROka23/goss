@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
 import '../role_screen.dart';
+import '../chat/chat_list_screen.dart';
 import 'home_screen.dart';
 import 'about_screen.dart';
 import 'logistics_screen.dart';
@@ -179,6 +180,16 @@ class _CustomerShellState extends State<CustomerShell> {
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen()));
+                },
+              ),
+              const Divider(color: Colors.white24),
+              ListTile(
+                leading: const Icon(Icons.headset_mic_outlined, color: GossColors.red),
+                title: Text(en ? 'Support chat' : 'شات خدمة العملاء', style: const TextStyle(color: Colors.white)),
+                subtitle: Text(en ? 'Encrypted end-to-end' : 'مشفّر من طرف لطرف', style: const TextStyle(color: Color(0xFFC9D3E0))),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChatListScreen()));
                 },
               ),
               const Divider(color: Colors.white24),

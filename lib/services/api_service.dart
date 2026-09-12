@@ -240,6 +240,7 @@ class ApiService {
 
   /// Fire-and-forget external push: admin updated a price -> customers' devices.
   static Future<void> notifyPriceUpdate({
+    required String token,
     required String productNameEn,
     required String productNameAr,
     required double oldPrice,
@@ -249,7 +250,7 @@ class ApiService {
     try {
       await http.post(
         Uri.parse('$baseUrl/api/notify/price-update'),
-        headers: _headers(),
+        headers: _headers(token: token),
         body: jsonEncode({
           'productNameEn': productNameEn,
           'productNameAr': productNameAr,
@@ -261,19 +262,5 @@ class ApiService {
     } catch (_) {
       // Push is best-effort; in-app updates still work without the server.
     }
-  }
-
-  /// Fire-and-forget external push: new customer request -> admins' devices.
-  static Future<void> notifyNewRequest({
-    required String customerName,
-    required int itemsCount,
-  }) async {
-    try {
-      await http.post(
-        Uri.parse('$baseUrl/api/notify/request'),
-        headers: _headers(),
-        body: jsonEncode({'customerName': customerName, 'itemsCount': itemsCount}),
-      );
-    } catch (_) {}
   }
 }

@@ -21,7 +21,7 @@ export default function Contact() {
           </article>
           <article className="card">
             <h3>{en ? "Email Us" : "البريد"}</h3>
-            <p><a href="mailto:info@gosst.com">info@gosst.com</a></p>
+            <p><a href="mailto:info@gossts.com">info@gossts.com</a></p>
           </article>
         </div>
         <p style={{ marginTop: 24 }}>

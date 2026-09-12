@@ -75,7 +75,7 @@ export default function Layout() {
             <div className="icon">✉</div>
             <div>
               <b>{copy.email}</b>
-              <span>info@gosst.com</span>
+              <span>info@gossts.com</span>
             </div>
           </div>
           <div className="contact-item">
@@ -120,7 +120,7 @@ export default function Layout() {
           <h4>{copy.contact}</h4>
           <p>Alexandria, Egypt</p>
           <p>+20 10 11428818</p>
-          <p>info@gosst.com</p>
+          <p>info@gossts.com</p>
         </div>
       </footer>
       <div className="copy">{copy.copy}</div>

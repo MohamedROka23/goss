@@ -131,9 +131,7 @@ Text(
                             onPressed: _pickDate,
                             icon: const Icon(Icons.calendar_today, size: 16),
                             label: Text(
-                              filterStr == null
-                                  ? (en ? 'Search by date' : 'بحث بالتاريخ')
-                                  : filterStr,
+                              filterStr ?? (en ? 'Search by date' : 'بحث بالتاريخ'),
                             ),
                           ),
                         ),

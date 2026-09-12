@@ -94,9 +94,7 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
                   onPressed: _pickDate,
                   icon: const Icon(Icons.calendar_today, size: 16),
                   label: Text(
-                    filterStr == null
-                        ? (en ? 'Search by date' : '\u0628\u062d\u062b \u0628\u0627\u0644\u062a\u0627\u0631\u064a\u062e')
-                        : filterStr,
+                    filterStr ?? (en ? 'Search by date' : '\u0628\u062d\u062b \u0628\u0627\u0644\u062a\u0627\u0631\u064a\u062e'),
                   ),
                 ),
               ),

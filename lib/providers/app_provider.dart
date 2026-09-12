@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
-import '../services/api_service.dart';
+import '../services/backend.dart';
 import '../services/backend_manager.dart';
 import '../services/firestore_backend.dart';
 import '../services/fcm_service.dart';
+import '../services/secure_store.dart';
+import '../services/notification_watcher.dart';
 
 class AppProvider extends ChangeNotifier {
   String _langSetting = 'en';
@@ -82,6 +86,162 @@ class AppProvider extends ChangeNotifier {
   String? get token => _token;
   bool get isLoggedIn => _token != null;
 
+  // Quick lock (قفل سريع) for the admin area: once enabled, resuming the app
+  // (or a cold start with a saved session) requires a biometric check or the
+  // saved 4-digit PIN before the dashboard is shown. The PIN is stored only as
+  // a SHA-256 hash; the enabled setting is purely local to this device.
+  bool _quickLockEnabled = false;
+  bool get quickLockEnabled => _quickLockEnabled;
+
+  /// Whether the session currently needs an unlock before showing the panel.
+  bool _quickLocked = false;
+  bool get quickLocked => _quickLocked;
+
+  /// Whether biometric unlock was chosen (a fingerprint / face prompt).
+  bool _quickLockBio = false;
+  bool get quickLockBio => _quickLockBio;
+
+  String _quickLockPinHash = '';
+  String get quickLockPinHash => _quickLockPinHash;
+
+  static String _hashQuickPin(String pin) =>
+      sha256.convert(utf8.encode('goss-quick-lock:$pin')).toString();
+
+  /// Persists the settings with the (hashed) PIN. Pass [bio] to also offer a
+  /// biometric prompt on this device.
+  Future<void> enableQuickLock({required bool bio, required String pin}) async {
+    _quickLockEnabled = true;
+    _quickLockBio = bio;
+    _quickLockPinHash = _hashQuickPin(pin);
+    _quickLocked = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('goss-quicklock', true);
+    await prefs.setBool('goss-quicklock-bio', bio);
+    await prefs.setString('goss-quicklock-pin', _quickLockPinHash);
+    await prefs.setBool('goss-quicklock-locked', false);
+    await SecureStore.writeQuickLockPinHash(_quickLockPinHash);
+    notifyListeners();
+  }
+
+  Future<void> disableQuickLock() async {
+    _quickLockEnabled = false;
+    _quickLockBio = false;
+    _quickLockPinHash = '';
+    _quickLocked = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('goss-quicklock');
+    await prefs.remove('goss-quicklock-bio');
+    await prefs.remove('goss-quicklock-pin');
+    await prefs.remove('goss-quicklock-locked');
+    await SecureStore.clearQuickLockPinHash();
+    notifyListeners();
+  }
+
+  bool verifyQuickLockPin(String pin) =>
+      _quickLockPinHash.isNotEmpty && _hashQuickPin(pin) == _quickLockPinHash;
+
+  // Quick sign-in (الدخول السريع): the login screen can sign the admin back in
+  // with a device passcode or fingerprint instead of retyping the password.
+  // The credentials live only in SecureStore (keystore/keychain), the passcode
+  // is kept hashed, and arming it requires a verified current password. This
+  // device-local profile intentionally survives logout(), so quick sign-in
+  // stays available from the admin login screen after a sign out.
+  bool _quickSignInEnabled = false;
+  bool get quickSignInEnabled => _quickSignInEnabled;
+
+  bool _quickSignInBio = false;
+  bool get quickSignInBio => _quickSignInBio;
+
+  String _quickSignInRole = '';
+  String get quickSignInRole => _quickSignInRole;
+
+  static const _qsEnabledKey = 'goss-quick-signin';
+  static const _qsBioKey = 'goss-quick-signin-bio';
+  static const _qsRoleKey = 'goss-quick-signin-role';
+
+  Future<bool> quickSignInArmed() async =>
+      _quickSignInEnabled && await SecureStore.hasCredentials();
+
+  Future<String?> rememberedEmail() => SecureStore.readEmail();
+
+  /// Encrypted password; callers must have passed a local auth gate (passcode
+  /// or biometric) before invoking this.
+  Future<String?> rememberedPassword() => SecureStore.readPassword();
+
+  Future<bool> verifyQuickSignInPasscode(String passcode) =>
+      SecureStore.verifyPasscode(passcode);
+
+  /// Stores the quick sign-in profile. Returns an empty string on success or a
+  /// user-facing error message otherwise.
+  Future<String> armQuickSignIn({
+    required String email,
+    required String password,
+    required String passcode,
+    required bool bio,
+    String? role,
+  }) async {
+    if (!RegExp(r'^\d{4}$').hasMatch(passcode)) {
+      return 'Enter a 4-digit passcode.';
+    }
+    final err = await SecureStore.storeCredentials(
+      email: email,
+      password: password,
+      passcode: passcode,
+    );
+    if (err != null) {
+      return 'Could not protect this device: please try again.';
+    }
+    _quickSignInEnabled = true;
+    _quickSignInBio = bio;
+    _quickSignInRole = role ?? _activeRole ?? '';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_qsEnabledKey, true);
+    await prefs.setBool(_qsBioKey, _quickSignInBio);
+    await prefs.setString(_qsRoleKey, _quickSignInRole);
+    _quickLocked = false;
+    await prefs.setBool('goss-quicklock-locked', false);
+    notifyListeners();
+    return '';
+  }
+
+  Future<void> setQuickSignInBio(bool bio) async {
+    _quickSignInBio = bio;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_qsBioKey, bio);
+    notifyListeners();
+  }
+
+  Future<void> disarmQuickSignIn() async {
+    await SecureStore.clear();
+    _quickSignInEnabled = false;
+    _quickSignInBio = false;
+    _quickSignInRole = '';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_qsEnabledKey);
+    await prefs.remove(_qsBioKey);
+    await prefs.remove(_qsRoleKey);
+    notifyListeners();
+  }
+
+  /// Locks the admin area (called when the app goes to the background while a
+  /// quick lock is configured).
+  Future<void> markQuickLocked() async {
+    if (!_quickLockEnabled || _quickLocked) return;
+    _quickLocked = true;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('goss-quicklock-locked', true);
+  }
+
+  /// Records a successful unlock (biometric or PIN).
+  Future<void> unmarkQuickLocked() async {
+    if (!_quickLocked) return;
+    _quickLocked = false;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('goss-quicklock-locked', false);
+  }
+
   /// Test-only: inject products without hitting a backend.
   @visibleForTesting
   void seedProducts(List<Product> products) {
@@ -128,12 +288,44 @@ class AppProvider extends ChangeNotifier {
     _langSetting = ['system', 'ar'].contains(lang) ? lang : 'en';
     final mode = prefs.getString('goss-dark');
     _themeMode = mode == 'dark' ? ThemeMode.dark : (mode == 'system' ? ThemeMode.system : ThemeMode.light);
-    _token = prefs.getString('goss-token');
+    final legacyToken = prefs.getString('goss-token');
+    // Seed the session from the plaintext copy right away: the vault lookup is
+    // async and its platform plugin can be slow or absent (e.g. widget tests),
+    // so startup must never block on it. When the vault answers, it overrides.
+    _token = legacyToken;
+    if (legacyToken != null) {
+      // One-time migration: move the session token into the vault, then drop
+      // the plaintext copy from the SharedPreferences archive.
+      unawaited(_migrateTokenToVault(legacyToken));
+    } else {
+      unawaited(_recoverVaultToken());
+    }
     _adminEmail = prefs.getString('goss-admin-email') ?? '';
     _lastSeenNotifAt = prefs.getString('goss-notif-seen') ?? '';
     _cachedPermissions = prefs.getStringList('goss-admin-permissions');
+    _quickLockEnabled = prefs.getBool('goss-quicklock') ?? false;
+    _quickLockBio = prefs.getBool('goss-quicklock-bio') ?? false;
+    final securedPin = await SecureStore.readQuickLockPinHash();
+    final legacyPin = prefs.getString('goss-quicklock-pin') ?? '';
+    _quickLockPinHash = securedPin ?? legacyPin;
+    if (legacyPin.isNotEmpty && legacyPin != securedPin) {
+      // One-time migration: secure the quick-lock hash and remove the
+      // SharePreferences copy that an offline brute-force could scrape.
+      await SecureStore.writeQuickLockPinHash(legacyPin);
+      await prefs.remove('goss-quicklock-pin');
+    } else if (legacyPin.isNotEmpty) {
+      await prefs.remove('goss-quicklock-pin');
+    }
+    _quickLocked = _quickLockEnabled && (prefs.getBool('goss-quicklock-locked') ?? false);
+    _quickSignInEnabled = prefs.getBool(_qsEnabledKey) ?? false;
+    _quickSignInBio = prefs.getBool(_qsBioKey) ?? false;
+    _quickSignInRole = prefs.getString(_qsRoleKey) ?? '';
     final savedRole = prefs.getString('goss-admin-role') ?? '';
     _activeRole = (savedRole == AdminRole.delegate || savedRole == AdminRole.admin) ? savedRole : null;
+    // Vault-first admin metadata: any stale plaintext pref copies from older
+    // builds are read only as a fallback, then migrated into the keystore and
+    // dropped from the archive (same pattern as the quick-lock PIN).
+    unawaited(_restoreAdminMetadataFromVault(legacyToken: legacyToken));
     try {
       final cartStr = prefs.getString('goss-cart');
       if (cartStr != null) {
@@ -149,6 +341,69 @@ class AppProvider extends ChangeNotifier {
       await resolveCurrentAdmin();
     }
     _startConnectivityWatch();
+  }
+
+  Future<void> _migrateTokenToVault(String token) async {
+    await SecureStore.writeToken(token);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('goss-token');
+  }
+
+  Future<void> _recoverVaultToken() async {
+    final secured = await SecureStore.readToken();
+    if (secured == null || secured.isEmpty || secured == _token) return;
+    _token = secured;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('goss-token');
+  }
+
+  /// Reads the admin session metadata from the vault and migrates any stale
+  /// plaintext pref copies from older builds into the keystore, then deletes
+  /// the plaintext copies so an extracted SharedPreferences archive cannot
+  /// replay or reveal them.
+  Future<void> _restoreAdminMetadataFromVault({
+    required String? legacyToken,
+  }) async {
+    try {
+      final email = await SecureStore.readAdminEmail();
+      if (email != null && email.isNotEmpty) {
+        _adminEmail = email;
+      }
+      final permList = await SecureStore.readAdminPermissions();
+      if (permList != null) {
+        _cachedPermissions = permList;
+      }
+      final savedRole = await SecureStore.readAdminRole();
+      if (savedRole != null && savedRole.isNotEmpty) {
+        _activeRole = (savedRole == AdminRole.delegate || savedRole == AdminRole.admin)
+            ? savedRole
+            : null;
+      }
+    } catch (_) {}
+    // Only when running with a live session does the offline metadata matter.
+    final needsMigration = legacyToken != null || _token != null;
+    if (!needsMigration) return;
+    final prefs = await SharedPreferences.getInstance();
+    final legacyEmail = prefs.getString('goss-admin-email');
+    final legacyPerms = prefs.getStringList('goss-admin-permissions');
+    final legacyRole = prefs.getString('goss-admin-role');
+    if (_adminEmail.isEmpty && legacyEmail != null && legacyEmail.isNotEmpty) {
+      _adminEmail = legacyEmail;
+      await SecureStore.writeAdminEmail(_adminEmail);
+    }
+    if (_cachedPermissions == null && legacyPerms != null) {
+      _cachedPermissions = legacyPerms;
+      await SecureStore.writeAdminPermissions(legacyPerms);
+    }
+    if (_activeRole == null && (legacyRole == AdminRole.delegate || legacyRole == AdminRole.admin)) {
+      _activeRole = legacyRole;
+      await SecureStore.writeAdminRole(_activeRole!);
+    }
+    await prefs.remove('goss-admin-email');
+    await prefs.remove('goss-admin-permissions');
+    await prefs.remove('goss-admin-role');
+    notifyListeners();
   }
 
   Future<void> loadCategories() async {
@@ -182,6 +437,36 @@ class AppProvider extends ChangeNotifier {
       return '';
     } catch (e) {
       return e.toString();
+    }
+  }
+
+  /// Bulk upserts the categories and products parsed from an uploaded Excel
+  /// sheet. Returns (error, categoriesCreated, productsCreated, productsUpdated).
+  Future<(String, int, int, int)> bulkImportProducts(
+    List<Map<String, dynamic>> categories,
+    List<Map<String, dynamic>> products,
+  ) async {
+    if (_token == null) return ('Not logged in', 0, 0, 0);
+    final existingCats = productCategories.map((c) => c.id).toSet();
+    final existingProds = _products.map((p) => p.id).toSet();
+    final catsCreated = categories.where((c) => !existingCats.contains(c['id'] as String)).length;
+    var created = 0;
+    var updated = 0;
+    for (final p in products) {
+      if (existingProds.contains(p['id'] as String)) {
+        updated++;
+      } else {
+        created++;
+      }
+    }
+    try {
+      final backend = await BackendManager.resolve();
+      await backend.importProducts(_token!, categories: categories, products: products);
+      await loadCategories();
+      await loadProducts();
+      return ('', catsCreated, created, updated);
+    } catch (e) {
+      return (e.toString(), 0, 0, 0);
     }
   }
 
@@ -336,13 +621,16 @@ class AppProvider extends ChangeNotifier {
       final backend = await BackendManager.resolve();
       _token = await backend.loginAdmin(email, password);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('goss-token', _token!);
-      await prefs.setString('goss-admin-email', email.trim());
+      await SecureStore.writeToken(_token!);
+      await prefs.remove('goss-token');
       _adminEmail = email.trim();
+      await SecureStore.writeAdminEmail(_adminEmail);
       _currentAdmin = null;
       _cachedPermissions = null;
+      _quickLocked = false;
+      await prefs.setBool('goss-quicklock-locked', false);
       _activeRole = (role == AdminRole.delegate || role == AdminRole.admin) ? role : null;
-      await prefs.setString('goss-admin-role', _activeRole ?? '');
+      if (_activeRole != null) await SecureStore.writeAdminRole(_activeRole!);
       _error = null;
       notifyListeners();
       FcmService.instance.onAdminLoggedIn(_token!);
@@ -423,8 +711,7 @@ class AppProvider extends ChangeNotifier {
     if (matched != null) {
       _cachedPermissions = matched.permissions.isNotEmpty ? matched.permissions : defaultPermissionsFor(matched.role);
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('goss-admin-permissions', permissions.toList());
+    await SecureStore.writeAdminPermissions(permissions.toList());
     notifyListeners();
   }
 
@@ -586,23 +873,50 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    final legacyToken = _token;
     _token = null;
     _currentAdmin = null;
     _cachedPermissions = null;
     _activeRole = null;
     _adminEmail = '';
     _myRequests = [];
+    NotificationWatcher.instance.stopAll();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('goss-token');
     await prefs.remove('goss-admin-permissions');
     await prefs.remove('goss-admin-role');
     await prefs.remove('goss-admin-email');
+    await SecureStore.clearAdminMetadata();
+    _quickLockEnabled = false;
+    _quickLockBio = false;
+    _quickLockPinHash = '';
+    _quickLocked = false;
+    await prefs.remove('goss-quicklock');
+    await prefs.remove('goss-quicklock-bio');
+    await prefs.remove('goss-quicklock-pin');
+    await prefs.remove('goss-quicklock-locked');
+    await SecureStore.clearToken();
+    await SecureStore.clearQuickLockPinHash();
     try {
       // revoke the Firebase session on sign out when running in Firebase mode
       final backend = await BackendManager.resolve();
       if (backend.isFirebase) {
         await FirestoreBackend.signOut();
       }
+    } catch (_) {}
+    // Force-invalidate the caller's server session (the server only ever
+    // revokes the presented token, never everyone else's).
+    try {
+      final baseUrl = await BackendSettings.loadBaseUrl();
+      final token = legacyToken;
+      await http.post(
+        Uri.parse('$baseUrl/api/logout'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty)
+            'Authorization': 'Bearer $token',
+        },
+      );
     } catch (_) {}
     notifyListeners();
   }
@@ -642,7 +956,6 @@ class AppProvider extends ChangeNotifier {
         'destination': destination,
       });
       clearCart();
-      ApiService.notifyNewRequest(customerName: name.isEmpty ? phone : name, itemsCount: items.length);
       _loading = false;
       notifyListeners();
     } catch (e) {

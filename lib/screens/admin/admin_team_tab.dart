@@ -4,6 +4,7 @@ import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
 import '../../models/models.dart';
 import '../../widgets/widgets.dart';
+import '../../services/chat_store.dart';
 
 class AdminTeamTab extends StatefulWidget {
   const AdminTeamTab({super.key});
@@ -21,6 +22,9 @@ class _AdminTeamTabState extends State<AdminTeamTab> {
   bool _loading = false;
   String? _error;
   String? _success;
+  bool _chatLoading = false;
+  bool _chatGranted = false;
+  String? _chatError;
 
   @override
   void initState() {
@@ -195,7 +199,7 @@ class _AdminTeamTabState extends State<AdminTeamTab> {
     );
     if (ok != true || !mounted) return;
     final err = await app.deleteAdmin(member.id);
-    if (!mounted) return;
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(err.isEmpty
           ? (en ? '${member.name} removed from the team.' : 'تمت إزالة ${member.name} من الفريق.')
@@ -238,6 +242,43 @@ class _AdminTeamTabState extends State<AdminTeamTab> {
       setState(() => _success = en
           ? '${adminRoleLabel(_role, ar: false)} added to the team.'
           : 'تمت إضافة ${adminRoleLabel(_role, ar: true)} إلى الفريق.');
+    }
+  }
+
+  Future<void> _grantChatToAll() async {
+    final app = context.read<AppProvider>();
+    final en = !app.isArabic;
+    setState(() {
+      _chatLoading = true;
+      _chatGranted = false;
+      _chatError = null;
+    });
+    try {
+      for (final a in app.admins) {
+        // Super admins already have every panel; delegates keep their limited set.
+        if (a.role == AdminRole.super_) continue;
+        if (a.role == AdminRole.delegate && !a.permissions.contains(AdminPerms.chat)) {
+          continue;
+        }
+        final current = a.permissions.isNotEmpty
+            ? a.permissions
+            : defaultPermissionsFor(a.role);
+        if (current.contains(AdminPerms.chat)) continue;
+        final err = await app.updateAdminRoleAndPermissions(
+          adminId: a.id,
+          permissions: [...current, AdminPerms.chat],
+        );
+        if (err.isNotEmpty) throw Exception(err);
+      }
+      // Register THIS device as a support endpoint so the customer-side
+      // "لا يوجد فريق دعم" error disappears immediately.
+      await ChatStore.ensureStaffKey();
+      setState(() => _chatGranted = true);
+    } catch (e) {
+      setState(() => _chatError =
+          en ? 'Failed to update some members.' : 'فشل تحديث بعض الأعضاء.');
+    } finally {
+      setState(() => _chatLoading = false);
     }
   }
 
@@ -376,6 +417,73 @@ class _AdminTeamTabState extends State<AdminTeamTab> {
                   if (_success != null) ...[
                     const SizedBox(height: 10),
                     Text(_success!, style: const TextStyle(color: GossColors.green, fontSize: 13)),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (canManageTeam) ...[
+          const SizedBox(height: 16),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.headset_mic, color: GossColors.navy),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          en ? 'Enable support chat for all admins' : 'تفعيل شات الدعم لجميع المسؤولين',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    en
+                        ? 'Adds the chat permission to every admin account and registers this device as a support endpoint so customers can start conversations immediately.'
+                        : 'تضيف صلاحية الشات لكل حساب مسؤول وتسجّل هذا الجهاز كنقطة دعم حتى يتمكن العملاء من فتح محادثات فورًا.',
+                    style: TextStyle(color: context.mutedColor, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_chatGranted) ...[
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle, size: 18, color: GossColors.green),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            en ? 'Done. The support tab is now active for all admins.' : 'تم. تبويب الدعم متاح الآن لجميع المسؤولين.',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else if (_chatLoading) ...[
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.6),
+                    ),
+                  ] else
+                    SizedBox(
+                      width: double.infinity,
+                      child: GossButton(
+                        label: en ? 'Grant chat to all & register device' : 'منح الشات للجميع وتسجيل الجهاز',
+                        color: GossColors.navy,
+                        icon: Icons.headset_mic,
+                        onPressed: _grantChatToAll,
+                      ),
+                    ),
+                  if (_chatError != null) ...[
+                    const SizedBox(height: 8),
+                    Text(_chatError!, style: const TextStyle(color: GossColors.red, fontSize: 13)),
                   ],
                 ],
               ),

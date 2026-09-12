@@ -354,7 +354,7 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: 8),
           Text(en ? 'Alexandria, Egypt' : '\u0627\u0644\u0625\u0633\u0643\u0646\u062f\u0631\u064a\u0629\u060c \u0645\u0635\u0631', style: const TextStyle(color: Color(0xFFC9D3E0))),
           const Text('+20 10 11428818', style: TextStyle(color: Color(0xFFC9D3E0))),
-          const Text('Info@gossts.com', style: TextStyle(color: Color(0xFFC9D3E0))),
+          const Text('info@gossts.com', style: TextStyle(color: Color(0xFFC9D3E0))),
         ],
       ),
     ];

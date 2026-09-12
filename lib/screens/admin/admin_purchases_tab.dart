@@ -18,6 +18,7 @@ class _AdminPurchasesTabState extends State<AdminPurchasesTab> {
   final _supplier = TextEditingController();
   final _qty = TextEditingController();
   final _costPrice = TextEditingController();
+  final _vat = TextEditingController();
   String? _productId;
   bool _saving = false;
 
@@ -26,6 +27,7 @@ class _AdminPurchasesTabState extends State<AdminPurchasesTab> {
     _supplier.dispose();
     _qty.dispose();
     _costPrice.dispose();
+    _vat.dispose();
     super.dispose();
   }
 
@@ -55,10 +57,10 @@ class _AdminPurchasesTabState extends State<AdminPurchasesTab> {
             ),
             ExportButtons(
               title: en ? 'Purchases' : '\u0627\u0644\u0645\u0634\u062a\u0631\u064a\u0627\u062a',
-              headers: [en ? 'Date' : '\u0627\u0644\u062a\u0627\u0631\u064a\u062e', en ? 'Supplier' : '\u0627\u0644\u0645\u0648\u0631\u062f', en ? 'Product' : '\u0627\u0644\u0645\u0646\u062a\u062c', en ? 'Qty' : '\u0627\u0644\u0643\u0645\u064a\u0629', en ? 'Cost' : '\u0627\u0644\u062a\u0643\u0644\u0641\u0629', en ? 'Total' : '\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a'],
+              headers: [en ? 'Date' : '\u0627\u0644\u062a\u0627\u0631\u064a\u062e', en ? 'Supplier' : '\u0627\u0644\u0645\u0648\u0631\u062f', en ? 'Product' : '\u0627\u0644\u0645\u0646\u062a\u062c', en ? 'Qty' : '\u0627\u0644\u0643\u0645\u064a\u0629', en ? 'Cost' : '\u0627\u0644\u062a\u0643\u0644\u0641\u0629', en ? 'VAT' : '\u0627\u0644\u0636\u0631\u064a\u0628\u0629', en ? 'Total' : '\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a'],
               rows: admin.purchases.map((p) {
                 final name = _productName(app, en, p.productId);
-                return [_fmtDate(p.date), p.supplier, name, '${p.qty}', p.costPrice.toStringAsFixed(2), p.total.toStringAsFixed(2)];
+                return [_fmtDate(p.date), p.supplier, name, '${p.qty}', p.costPrice.toStringAsFixed(2), p.vat.toStringAsFixed(2), p.total.toStringAsFixed(2)];
               }).toList(),
             ),
           ],
@@ -116,6 +118,15 @@ class _AdminPurchasesTabState extends State<AdminPurchasesTab> {
                 Expanded(child: TextField(controller: _costPrice, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(hintText: en ? 'Cost price / unit' : '\u0633\u0639\u0631 \u0627\u0644\u062a\u0643\u0644\u0641\u0629 / \u0648\u062d\u062f\u0629'))),
               ],
             ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _vat,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                hintText: en ? 'VAT (EGP) — leave empty if none' : '\u0627\u0644\u0636\u0631\u064a\u0628\u0629 (ج.م) — \u0627\u062a\u0631\u0643\u0647\u0627 \u0641\u0627\u0636\u064a\u0629 \u0625\u0646 \u0643\u0627\u0646\u062a \u0645\u0641\u0642\u0648\u062f\u0629',
+                prefixIcon: const Icon(Icons.request_quote_outlined, size: 20),
+              ),
+            ),
             const SizedBox(height: 12),
             GossButton(
               label: en ? 'Record purchase' : '\u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u0634\u0631\u0627\u0621',
@@ -124,6 +135,7 @@ class _AdminPurchasesTabState extends State<AdminPurchasesTab> {
                 if (app.token == null || _productId == null || _saving) return;
                 final qty = int.tryParse(_qty.text) ?? 0;
                 final cost = double.tryParse(_costPrice.text) ?? 0;
+                final vat = double.tryParse(_vat.text) ?? 0;
                 if (qty <= 0) return;
                 setState(() => _saving = true);
                 try {
@@ -132,11 +144,13 @@ class _AdminPurchasesTabState extends State<AdminPurchasesTab> {
                     'productId': _productId,
                     'qty': qty,
                     'costPrice': cost,
-                    'total': cost * qty,
+                    'vat': vat,
+                    'total': cost * qty + vat,
                   });
                   _supplier.clear();
                   _qty.clear();
                   _costPrice.clear();
+                  _vat.clear();
                 } catch (_) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -204,7 +218,8 @@ Widget _purchaseRow(BuildContext context, AppProvider app, AdminProvider admin, 
       child: ListTile(
         title: Text('$name \u00d7 ${p.qty}'),
         subtitle: Text(
-          '${p.supplier.isEmpty ? '-' : p.supplier} | ${en ? 'EGP' : '\u062c.\u0645'} ${p.total.toStringAsFixed(2)}',
+          '${p.supplier.isEmpty ? '-' : p.supplier} | ${en ? 'EGP' : '\u062c.\u0645'} ${p.total.toStringAsFixed(2)}'
+          '${p.vat > 0 ? ' | ${en ? 'VAT' : '\u0627\u0644\u0636\u0631\u064a\u0628\u0629'} ${en ? 'EGP' : '\u062c.\u0645'} ${p.vat.toStringAsFixed(2)}' : ''}',
           textDirection: TextDirection.ltr,
         ),
         trailing: Row(
@@ -282,6 +297,7 @@ class _PurchaseEditDialogState extends State<_PurchaseEditDialog> {
   late final TextEditingController _supplier;
   late final TextEditingController _qty;
   late final TextEditingController _costPrice;
+  late final TextEditingController _vat;
   late String? _productId;
 
   bool get _en => widget.en;
@@ -294,6 +310,9 @@ class _PurchaseEditDialogState extends State<_PurchaseEditDialog> {
     _costPrice = TextEditingController(
       text: widget.purchase.costPrice.toStringAsFixed(2),
     );
+    _vat = TextEditingController(
+      text: widget.purchase.vat > 0 ? widget.purchase.vat.toStringAsFixed(2) : '',
+    );
     _productId = widget.purchase.productId;
   }
 
@@ -302,6 +321,7 @@ class _PurchaseEditDialogState extends State<_PurchaseEditDialog> {
     _supplier.dispose();
     _qty.dispose();
     _costPrice.dispose();
+    _vat.dispose();
     super.dispose();
   }
 
@@ -359,6 +379,16 @@ class _PurchaseEditDialogState extends State<_PurchaseEditDialog> {
                   isDense: true,
                 ),
               ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _vat,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: _en ? 'VAT (EGP)' : '\u0627\u0644\u0636\u0631\u064a\u0628\u0629 (ج.م)',
+                  hintText: _en ? 'Leave empty if none' : '\u0627\u062a\u0631\u0643\u0647 \u0641\u0627\u0636\u064a\u0627\u064b \u0625\u0646 \u0644\u0645 \u062a\u0648\u062c\u062f',
+                  isDense: true,
+                ),
+              ),
             ],
           ),
         ),
@@ -375,6 +405,7 @@ class _PurchaseEditDialogState extends State<_PurchaseEditDialog> {
               'supplier': _supplier.text,
               'qty': int.tryParse(_qty.text) ?? 0,
               'costPrice': double.tryParse(_costPrice.text) ?? 0,
+              'vat': double.tryParse(_vat.text) ?? 0,
             });
           },
           child: Text(_en ? 'Save' : '\u062d\u0641\u0638'),

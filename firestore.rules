@@ -1,63 +1,221 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // An admin is anyone who has an account doc under /admins/{auth.uid}.
-    function isAdmin() {
-      return request.auth != null &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    function signedIn() {
+      return request.auth != null;
     }
 
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid))
+            .data.role in ['admin', 'super'];
+    }
+
+    function hasRole(role) {
+      return isAdmin() && adminDoc().data.role == role;
+    }
+
+    // A team member may act when they carry the named panel permission. The
+    // super admin bypasses every permission gate.
+    function hasPerm(perm) {
+      return hasRole('super') ||
+        (isAdmin() &&
+          adminDoc().data.permissions is list &&
+          perm in adminDoc().data.permissions);
+    }
+
+    // No register code was ever allowed to grant admin: self-registration is
+    // provisioning zero (a bare delegate). Everything else comes from a super.
     match /products/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update, delete: if hasPerm('products');
     }
 
     match /categories/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update, delete: if hasPerm('categories');
     }
 
     match /notifications/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, update, delete: if hasPerm('quotes');
     }
 
     match /admins/{uid} {
-      // Any existing admin can read, update or remove member accounts.
-      // A brand-new account may only create its own document while proving
-      // the admin registration code (the app removes the code right after).
       allow read: if isAdmin();
-      allow create: if request.auth != null &&
-        (isAdmin() || (
-          request.auth.uid == uid &&
-          request.resource.data.role == 'admin' &&
-          request.resource.data.registerCode == 'GOSST@admin'));
-      allow update, delete: if isAdmin();
+      // A brand-new user may create their OWN document ONLY as an unprivileged
+      // delegate (no role, no permissions, no register code). Real access is
+      // granted later by a super admin through the team panel.
+      allow create: if signedIn() &&
+        request.auth.uid == uid &&
+        request.resource.data.role == 'delegate' &&
+        request.resource.data.permissions == [];
+      // Team members with the admins (team) panel manage accounts exactly like
+      // the HTTP server: they may create admin/delegate accounts but can never
+      // mint a super admin or write the protected fields.
+      allow create: if hasPerm('team') &&
+        !request.resource.data.keys().hasAny([
+          'registerCode', 'approved', 'uid'
+        ]) &&
+        request.resource.data.role in ['delegate', 'admin'];
+      // The owner/super admin provisions and maintains members without limits;
+      // a team-panel member may update only non-super accounts and can never
+      // promote anyone (including themselves) to super. Protected fields are
+      // checked over the before/after diff: for update() the result data keeps
+      // every field already present on the document.
+      allow update: if hasRole('super') &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'registerCode', 'approved', 'uid'
+        ]);
+      allow update: if hasPerm('team') &&
+        resource.data.role != 'super' &&
+        request.resource.data.role in ['delegate', 'admin'] &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'registerCode', 'approved', 'uid'
+        ]);
+      allow delete: if hasRole('super') ||
+        (hasPerm('team') && resource.data.role != 'super');
     }
 
-    // Requests are owned by the (anonymous) customer that created them.
     match /requests/{id} {
-      allow create: if request.auth != null &&
+      allow create: if signedIn() &&
         request.resource.data.customerId == request.auth.uid;
-      allow read, update, delete: if isAdmin() ||
-        (request.auth != null && resource.data.customerId == request.auth.uid);
+      // Team reads only with the requests panel; customers only their own.
+      allow read: if (isAdmin() && hasPerm('requests')) ||
+        (signedIn() && resource.data.customerId == request.auth.uid);
+      // Customers may only touch their own request and can never re-point it
+      // at another account (customerId is immutable).
+      allow update: if isAdmin() ||
+        (signedIn() &&
+          resource.data.customerId == request.auth.uid &&
+          request.resource.data.customerId == resource.data.customerId);
+      allow delete: if isAdmin();
     }
 
     match /purchases/{id} {
-      allow read, write: if isAdmin();
+      // Gated by the PANEL PERMISSION (not by role) so an owner-granted
+      // delegate/team member can actually open the data they were given.
+      allow read, write: if hasPerm('purchases');
     }
 
     match /expenses/{id} {
-      allow read, write: if isAdmin();
+      allow read, write: if hasPerm('expenses');
     }
 
-    // A customer may update only their own FCM token doc.
+    match /journal/{id} {
+      allow read, write: if hasPerm('accounting');
+    }
+
+    match /payments/{id} {
+      allow read, write: if hasPerm('accounting');
+    }
+
     match /customer_tokens/{cid} {
-      allow read, write: if request.auth != null && cid == request.auth.uid;
+      allow read, write: if signedIn() && cid == request.auth.uid;
     }
 
     match /admin_tokens/{uid} {
       allow read, write: if isAdmin();
+    }
+
+    // E2E support chat (شات الدعم المشفّر). All message bodies in Firestore
+    // are ciphertext; these rules only enforce identity + role boundaries.
+    match /chat_public_keys/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() &&
+        request.auth.uid == uid &&
+        request.resource.data.publicB64 is string &&
+        request.resource.data.publicB64.size() <= 2048;
+    }
+
+    match /chat_staff_keys/{uid} {
+      // Public keys are public (needed so customers can seal a conversation to
+      // every support device). Any authenticated team member may enroll their
+      // device as a support endpoint — the chat PANEL visibility stays gated by
+      // the `chat` permission, but support devices must exist even when a
+      // member was provisioned before that permission was introduced.
+      allow read: if signedIn();
+      allow create, update: if isAdmin() &&
+        uid == request.auth.uid &&
+        request.resource.data.publicB64 is string &&
+        request.resource.data.publicB64.size() <= 2048;
+    }
+
+    match /chat_conversations/{id} {
+      function requestedParticipant(uid) {
+        return signedIn() &&
+          request.resource.data.participants is list &&
+          uid in request.resource.data.participants;
+      }
+      function isParticipant() {
+        return signedIn() &&
+          resource.data.participants is list &&
+          request.auth.uid in resource.data.participants;
+      }
+      allow read: if isAdmin() || isParticipant();
+      allow create: if requestedParticipant(request.auth.uid) &&
+        request.resource.data.customerId == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.ephPubB64 is string &&
+        request.resource.data.wrappedKeys is map;
+      // Team updates the lifecycle only; the customer identity and the sealed
+      // key boxes are immutable (created once, never re-wrapped). The guard is
+      // expressed over the *diff* between before/after, because for update() the
+      // result data contains every preserved field of the existing document.
+      allow update: if isAdmin() &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'customerId', 'participants', 'wrappedKeys',
+          'wrapNonces', 'wrapMacs', 'ephPubB64'
+        ]);
+      // A participant (the customer) may only move their own conversation's
+      // lifecycle: close it at any time (including cancelling a pending
+      // request), or RE-OPEN it after it was closed. They can never promote a
+      // pending conversation to open by themselves — only a team member can.
+      // Identity, key boxes, timestamps and the customer name stay immutable.
+      allow update: if isParticipant() &&
+        request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['status']) &&
+        (request.resource.data.status == 'closed' ||
+          (request.resource.data.status == 'open' &&
+            resource.data.status == 'closed'));
+      // Deleting a conversation (and its messages) is a team action. The
+      // messages are protected by the subcollection rules below.
+      allow delete: if isAdmin();
+    }
+
+    match /chat_conversations/{id}/messages/{msgId} {
+      function mayRead() {
+        return hasPerm('chat') ||
+          (signedIn() &&
+            get(/databases/$(database)/documents/chat_conversations/$(id))
+                .data.participants is list &&
+            request.auth.uid in
+              get(/databases/$(database)/documents/chat_conversations/$(id))
+                  .data.participants);
+      }
+      allow read: if mayRead();
+      allow create: if mayRead() &&
+        get(/databases/$(database)/documents/chat_conversations/$(id))
+            .data.status == 'open' &&
+        request.resource.data.senderUid == request.auth.uid &&
+        request.resource.data.senderRole in ['customer', 'admin'] &&
+        request.resource.data.kind in ['text', 'image'] &&
+        request.resource.data.data is string &&
+        request.resource.data.data.size() <= 1048576 &&
+        (!('mediaData' in request.resource.data) ||
+          (request.resource.data.mediaData is string &&
+            request.resource.data.mediaData.size() <= 1048576));
+      allow update, delete: if isAdmin();
+    }
+
+    // Catch-all deny: any collection not listed above is inaccessible.
+    match /{path=**} {
+      allow read, write: if false;
     }
   }
 }

@@ -4,6 +4,7 @@ class Product {
   final String unit;
   final double price;
   final double costPrice;
+  final double stock;
   final String nameEn;
   final String nameAr;
   final String descEn;
@@ -15,6 +16,7 @@ class Product {
     required this.unit,
     required this.price,
     this.costPrice = 0,
+    this.stock = 0,
     required this.nameEn,
     required this.nameAr,
     required this.descEn,
@@ -28,6 +30,7 @@ class Product {
       unit: json['unit'] ?? '',
       price: (json['price'] ?? 0).toDouble(),
       costPrice: (json['costPrice'] ?? 0).toDouble(),
+      stock: (json['stock'] ?? 0).toDouble(),
       nameEn: json['nameEn'] ?? '',
       nameAr: json['nameAr'] ?? '',
       descEn: json['descEn'] ?? '',
@@ -41,6 +44,7 @@ class Product {
         'unit': unit,
         'price': price,
         'costPrice': costPrice,
+        'stock': stock,
         'nameEn': nameEn,
         'nameAr': nameAr,
         'descEn': descEn,
@@ -52,6 +56,7 @@ class Product {
         'unit': unit,
         'price': price,
         'costPrice': costPrice,
+        'stock': stock,
         'nameEn': nameEn,
         'nameAr': nameAr,
         'descEn': descEn,
@@ -306,6 +311,131 @@ class Expense {
       };
 }
 
+/// One debit/credit leg of a double-entry journal posting.
+class JournalLine {
+  final String accountCode;
+  final String accountEn;
+  final String accountAr;
+  final double amount;
+
+  const JournalLine({
+    required this.accountCode,
+    required this.accountEn,
+    required this.accountAr,
+    required this.amount,
+  });
+
+  factory JournalLine.fromJson(Map<String, dynamic> json) => JournalLine(
+        accountCode: json['accountCode'] ?? '',
+        accountEn: json['accountEn'] ?? '',
+        accountAr: json['accountAr'] ?? '',
+        amount: (json['amount'] ?? 0).toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'accountCode': accountCode,
+        'accountEn': accountEn,
+        'accountAr': accountAr,
+        'amount': amount,
+      };
+}
+
+/// A balanced double-entry journal entry (debit side == credit side).
+class JournalEntry {
+  final String id;
+  final String date;
+  final String memo;
+  final List<JournalLine> debits;
+  final List<JournalLine> credits;
+  final String createdAt;
+
+  JournalEntry({
+    required this.id,
+    required this.date,
+    required this.memo,
+    required this.debits,
+    required this.credits,
+    required this.createdAt,
+  });
+
+  double get totalDebit => debits.fold(0, (n, l) => n + l.amount);
+  double get totalCredit => credits.fold(0, (n, l) => n + l.amount);
+
+  /// A posting is only book-kept when the debits equal the credits.
+  bool get isBalanced => totalDebit > 0 && (totalDebit - totalCredit).abs() < 0.01;
+
+  factory JournalEntry.fromJson(Map<String, dynamic> json) => JournalEntry(
+        id: json['id'] ?? '',
+        date: json['date'] ?? '',
+        memo: json['memo'] ?? '',
+        debits: (json['debits'] as List<dynamic>? ?? [])
+            .map((e) => JournalLine.fromJson(e))
+            .toList(),
+        credits: (json['credits'] as List<dynamic>? ?? [])
+            .map((e) => JournalLine.fromJson(e))
+            .toList(),
+        createdAt: CustomerRequest._dateToString(json['createdAt']),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'date': date,
+        'memo': memo,
+        'debits': debits.map((l) => l.toJson()).toList(),
+        'credits': credits.map((l) => l.toJson()).toList(),
+      };
+}
+
+/// Money received from a customer against one of their invoices (orders).
+class Payment {
+  final String id;
+  final String requestId;
+  final String customerId;
+  final String company;
+  final String name;
+  final String date;
+  final double amount;
+  final String method;
+  final String note;
+  final String createdAt;
+
+  Payment({
+    required this.id,
+    required this.requestId,
+    required this.customerId,
+    required this.company,
+    required this.name,
+    required this.date,
+    required this.amount,
+    this.method = 'cash',
+    this.note = '',
+    required this.createdAt,
+  });
+
+  factory Payment.fromJson(Map<String, dynamic> json) => Payment(
+        id: json['id'] ?? '',
+        requestId: json['requestId'] ?? '',
+        customerId: json['customerId'] ?? '',
+        company: json['company'] ?? '',
+        name: json['name'] ?? '',
+        date: json['date'] ?? '',
+        amount: (json['amount'] ?? 0).toDouble(),
+        method: json['method'] ?? 'cash',
+        note: json['note'] ?? '',
+        createdAt: CustomerRequest._dateToString(json['createdAt']),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'requestId': requestId,
+        'customerId': customerId,
+        'company': company,
+        'name': name,
+        'date': date,
+        'amount': amount,
+        'method': method,
+        'note': note,
+      };
+}
+
 class Purchase {
   final String id;
   final String date;
@@ -313,6 +443,11 @@ class Purchase {
   final String productId;
   final int qty;
   final double costPrice;
+
+  /// Value-added tax recorded on the purchase invoice (0 when left empty).
+  final double vat;
+
+  /// Invoice total: goods value (qty * costPrice) plus VAT.
   final double total;
 
   Purchase({
@@ -322,6 +457,7 @@ class Purchase {
     required this.productId,
     required this.qty,
     required this.costPrice,
+    this.vat = 0,
     required this.total,
   });
 
@@ -333,6 +469,7 @@ class Purchase {
       productId: json['productId'] ?? '',
       qty: json['qty'] ?? 0,
       costPrice: (json['costPrice'] ?? 0).toDouble(),
+      vat: (json['vat'] ?? 0).toDouble(),
       total: (json['total'] ?? 0).toDouble(),
     );
   }
@@ -343,6 +480,7 @@ class Purchase {
         'productId': productId,
         'qty': qty,
         'costPrice': costPrice,
+        'vat': vat,
         'total': total,
       };
 }
@@ -470,6 +608,8 @@ class AdminPerms {
   static const expenses = 'expenses';
   static const tracking = 'tracking';
   static const team = 'team';
+  static const accounting = 'accounting';
+  static const chat = 'chat';
 }
 
 const List<String> allPermissionKeys = [
@@ -481,6 +621,8 @@ const List<String> allPermissionKeys = [
   AdminPerms.expenses,
   AdminPerms.tracking,
   AdminPerms.team,
+  AdminPerms.accounting,
+  AdminPerms.chat,
 ];
 
 List<String> defaultPermissionsFor(String role) {
@@ -500,6 +642,8 @@ String permissionLabel(String key, {required bool ar}) {
     AdminPerms.expenses: 'Expenses',
     AdminPerms.tracking: 'Tracking orders',
     AdminPerms.team: 'Team & Permissions',
+    AdminPerms.accounting: 'Accounting',
+    AdminPerms.chat: 'Support chat',
   };
   const arMap = {
     AdminPerms.requests: 'الطلبات',
@@ -510,6 +654,8 @@ String permissionLabel(String key, {required bool ar}) {
     AdminPerms.expenses: 'المصاريف',
     AdminPerms.tracking: 'التراكنج أوردر',
     AdminPerms.team: 'الفريق والصلاحيات',
+    AdminPerms.accounting: 'المحاسبة',
+    AdminPerms.chat: 'شات خدمة العملاء',
   };
   return (ar ? arMap : en)[key] ?? key;
 }

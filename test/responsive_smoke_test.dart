@@ -175,7 +175,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
         const titles = [
           'Requests', 'Tracking', 'Customers', 'Quotes',
-          'Purchasing', 'Profit', 'Expenses', 'Admins',
+          'Purchasing', 'Profit', 'Accounting', 'Admins',
         ];
         final view = tester.view.physicalSize / tester.view.devicePixelRatio;
         bool fullyVisible(String t) => tester

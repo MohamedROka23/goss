@@ -37,7 +37,7 @@
 | Feature graphic (1024x500) | `store_assets\feature_graphic_1024x500.png` |
 | Phone screenshots | ارفع على الأقل 2: من `store_assets\09-role.png` و`phone-01-home.png` و`phone-02-catalog.png` و`03-about.png` و`07-contact.png` وغيرها |
 | Categorization | Business (فئة) |
-| Contact details | موقع: https://Info@gossts.com / بريد الدعم: Info@gossts.com |
+| Contact details | بريد الدعم: info@gossts.com |
 | Privacy policy URL | رابط `privacy_policy.html` بعد استضافته |
 
 ## الخطوة 4 — استمارة الأمان (Data safety)
@@ -56,7 +56,7 @@
 ## الخطوة 5 — التصنيف العمري (Content rating)
 1. ادخل IARC questionnaire من نفس صفحة App content.
 2. أجب بصدق: لا عنف، لا محتوى جنسي، لا مخدرات، لا قمار، لا... → نتيجة متوقعة **3+ (أو 13+ للتصنيف الآمن)**. اختر 13+ إن أردت أمانًا إضافيًا.
-3. أضف بريدًا للتحقق (يمكن Info@gossts.com) وأتمم.
+3. أضف بريدًا للتحقق (يمكن info@gossts.com) وأتمم.
 
 ## الخطوة 6 — الرفع (Release)
 1. من القائمة: **Testing** ← **Internal testing** ← Create release.

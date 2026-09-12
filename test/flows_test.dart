@@ -358,7 +358,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.chevron_right).last);
     await tester.pumpAndSettle();
     expect(
-      fullyVisible('Purchasing') || fullyVisible('Profit') || fullyVisible('Expenses'),
+      fullyVisible('Purchasing') || fullyVisible('Profit') || fullyVisible('Accounting'),
       isTrue,
       reason: 'right chevron must slide the strip forward',
     );

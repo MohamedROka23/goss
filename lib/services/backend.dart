@@ -15,9 +15,30 @@ abstract class GossBackend {
   Stream<List<Product>> watchProducts();
   Future<Product> saveProduct(String token, Map<String, dynamic> data);
   Future<void> deleteProduct(String token, String id);
+
+  /// Bulk upserts categories and products parsed from an uploaded Excel sheet.
+  /// Each entry must carry a stable `id`; existing documents are overwritten,
+  /// new ones are created. Runs as a Firestore WriteBatch.
+  Future<void> importProducts(
+    String token, {
+    required List<Map<String, dynamic>> categories,
+    required List<Map<String, dynamic>> products,
+  });
   Future<String> loginAdmin(String email, String password);
   Future<void> registerAdmin(String name, String email, String password, String code);
+
+  /// True when [email] + [password] are valid on the server. Used to authorize
+  /// enabling quick sign-in (الدخول السريع) without mutating the live session.
+  Future<bool> verifyAdminCredentials(String email, String password);
   Future<void> changeAdminPassword(String email, String oldPassword, String newPassword);
+
+  /// Sends a password-recovery message to the registered admin email. The
+  /// response is intentionally generic to avoid leaking which emails exist.
+  Future<bool> requestPasswordReset(String email);
+
+  /// Applies a new admin password using the one-time recovery [code] e-mailed
+  /// by [requestPasswordReset].
+  Future<bool> resetPassword(String email, String code, String newPassword);
   Future<List<AdminUser>> fetchAdmins(String token);
   Future<void> registerAdminByAdmin(
     String token,
@@ -72,6 +93,16 @@ abstract class GossBackend {
   Future<Expense> saveExpense(String token, Map<String, dynamic> data);
   Future<Expense> updateExpense(String token, String id, Map<String, dynamic> data);
   Future<void> deleteExpense(String token, String id);
+
+  // Accounting: double-entry journal
+  Future<List<JournalEntry>> fetchJournal(String token);
+  Future<JournalEntry> saveJournalEntry(String token, Map<String, dynamic> data);
+  Future<void> deleteJournalEntry(String token, String id);
+
+  // Accounting: customer payments / receivables
+  Future<List<Payment>> fetchPayments(String token);
+  Future<Payment> savePayment(String token, Map<String, dynamic> data);
+  Future<void> deletePayment(String token, String id);
 }
 
 class BackendSettings {
@@ -94,7 +125,21 @@ class BackendSettings {
     return prefs.getString(_keyUrl) ?? 'http://10.0.2.2:4000';
   }
 
+  /// Only HTTPS endpoints are accepted for the API so credentials can never be
+  /// sent in the clear. Loopback dev hosts (local/emulator) still allow http.
+  static bool isValidBaseUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.host.isEmpty) return false;
+    if (uri.scheme == 'https') return true;
+    if (uri.scheme == 'http') {
+      const loopback = {'localhost', '127.0.0.1', '10.0.2.2', '::1'};
+      return loopback.contains(uri.host.toLowerCase());
+    }
+    return false;
+  }
+
   static Future<void> saveBaseUrl(String url) async {
+    if (!isValidBaseUrl(url)) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyUrl, url);
   }

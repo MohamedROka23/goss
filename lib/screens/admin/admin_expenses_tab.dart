@@ -138,7 +138,7 @@ class _AdminExpensesTabState extends State<AdminExpensesTab> {
                       _category.clear();
                       _description.clear();
                       _amount.clear();
-                      if (mounted) {
+                      if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text(en ? 'Expense recorded.' : '\u062a\u0645 \u062a\u0633\u062c\u064a\u0644 \u0627\u0644\u0645\u0635\u0631\u0648\u0641.'),
                           backgroundColor: GossColors.green,
@@ -250,6 +250,7 @@ class _AdminExpensesTabState extends State<AdminExpensesTab> {
   }
 
 Future<void> _editExpense(AppProvider app, AdminProvider admin, bool en, Expense e) async {
+    final messenger = ScaffoldMessenger.of(context);
     final data = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _ExpenseEditDialog(expense: e, en: en),
@@ -257,25 +258,22 @@ Future<void> _editExpense(AppProvider app, AdminProvider admin, bool en, Expense
     if (data == null || !mounted) return;
     try {
       await admin.updateExpense(app.token!, e.id, data);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(en ? 'Expense updated.' : '\u062a\u0645 \u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u0645\u0635\u0631\u0648\u0641.'),
-          backgroundColor: GossColors.green,
-        ));
-      }
+      messenger.showSnackBar(SnackBar(
+        content: Text(en ? 'Expense updated.' : '\u062a\u0645 \u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u0645\u0635\u0631\u0648\u0641.'),
+        backgroundColor: GossColors.green,
+      ));
     } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(en
-              ? 'Unable to update the expense. Check your connection.'
-              : '\u062a\u0639\u0630\u0631 \u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u0645\u0635\u0631\u0648\u0641. \u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u0627\u062a\u0635\u0627\u0644.'),
-          backgroundColor: GossColors.red,
-        ));
-      }
+      messenger.showSnackBar(SnackBar(
+        content: Text(en
+            ? 'Unable to update the expense. Check your connection.'
+            : '\u062a\u0639\u0630\u0631 \u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u0645\u0635\u0631\u0648\u0641. \u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u0627\u062a\u0635\u0627\u0644.'),
+        backgroundColor: GossColors.red,
+      ));
     }
   }
 
   Future<void> _deleteExpense(AppProvider app, AdminProvider admin, bool en, Expense e) async {
+    final messenger = ScaffoldMessenger.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -299,21 +297,17 @@ Future<void> _editExpense(AppProvider app, AdminProvider admin, bool en, Expense
     if (ok != true || !mounted) return;
     try {
       await admin.deleteExpense(app.token!, e.id);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(en ? 'Expense deleted.' : '\u062a\u0645 \u062d\u0630\u0641 \u0627\u0644\u0645\u0635\u0631\u0648\u0641.'),
-          backgroundColor: GossColors.green,
-        ));
-      }
+      messenger.showSnackBar(SnackBar(
+        content: Text(en ? 'Expense deleted.' : '\u062a\u0645 \u062d\u0630\u0641 \u0627\u0644\u0645\u0635\u0631\u0648\u0641.'),
+        backgroundColor: GossColors.green,
+      ));
     } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(en
-              ? 'Unable to delete the expense. Check your connection.'
-              : '\u062a\u0639\u0630\u0631 \u062d\u0630\u0641 \u0627\u0644\u0645\u0635\u0631\u0648\u0641. \u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u0627\u062a\u0635\u0627\u0644.'),
-          backgroundColor: GossColors.red,
-        ));
-      }
+      messenger.showSnackBar(SnackBar(
+        content: Text(en
+            ? 'Unable to delete the expense. Check your connection.'
+            : '\u062a\u0639\u0630\u0631 \u062d\u0630\u0641 \u0627\u0644\u0645\u0635\u0631\u0648\u0641. \u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u0627\u062a\u0635\u0627\u0644.'),
+        backgroundColor: GossColors.red,
+      ));
     }
   }
 

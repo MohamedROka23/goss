@@ -52,6 +52,14 @@ android {
 
     buildTypes {
         release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // The plugin consumer rules (Firebase, local_auth, ...) are applied
+            // automatically; this file keeps the app's own entry points.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig =
                 if (keystorePropertiesFile.exists()) {
                     signingConfigs.getByName("release")
@@ -70,6 +78,7 @@ kotlin {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation("androidx.appcompat:appcompat:1.7.0")
 }
 
 flutter {

@@ -25,7 +25,7 @@ const ts = FieldValue.serverTimestamp();
 async function main() {
   await db.collection('admins').doc('Lt3KI3MAoIgnK1tt028suzJJDlq1').set({
     name: 'Gosst Master Admin',
-    email: 'info@gosst.com',
+    email: 'info@gossts.com',
     role: 'super',
     createdAt: ts,
   });

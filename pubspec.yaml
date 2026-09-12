@@ -1,7 +1,7 @@
 name: goss
 description: "GOSST - Global Outsourcing Services Trading"
 publish_to: 'none'
-version: 1.0.2+3
+version: 2.0.0+4
 
 environment:
   sdk: ^3.13.2
@@ -23,11 +23,20 @@ dependencies:
   pdf: ^3.12.0
   excel: ^4.0.6
   share_plus: ^13.3.0
+  file_picker: ^12.2.0
   path_provider: ^2.1.6
   firebase_messaging: ^15.2.10
+  firebase_app_check: ^0.3.0
   flutter_local_notifications: ^22.3.0
   package_info_plus: ^10.0.0
   uuid: ^4.6.0
+  local_auth: ^3.0.2
+  crypto: ^3.0.7
+  flutter_secure_storage: ^11.1.0
+  cryptography: ^2.7.0
+  image_picker: ^1.2.1
+  image: ^4.3.0
+  freerasp: ^8.2.2
 
 dev_dependencies:
   flutter_test:

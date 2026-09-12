@@ -8,6 +8,7 @@ import '../../services/backend_manager.dart';
 import '../../services/api_service.dart';
 import '../../services/translation_service.dart';
 import '../../widgets/widgets.dart';
+import 'admin_product_import_screen.dart';
 
 class AdminQuotesTab extends StatefulWidget {
   const AdminQuotesTab({super.key});
@@ -25,6 +26,7 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
   final _unit = TextEditingController();
   final _price = TextEditingController();
   final _costPrice = TextEditingController();
+  final _stock = TextEditingController();
   String _category = '';
   String? _editId;
   String _unitChoice = 'كيلو';
@@ -46,6 +48,7 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
     _unit.dispose();
     _price.dispose();
     _costPrice.dispose();
+    _stock.dispose();
     super.dispose();
   }
 
@@ -96,15 +99,17 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.headingColor),
               ),
             ),
+            const SizedBox(width: 4),
             ExportButtons(
               title: en ? 'Products' : '\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a',
-              headers: [en ? 'Name' : '\u0627\u0644\u0627\u0633\u0645', en ? 'Category' : '\u0627\u0644\u0641\u0626\u0629', en ? 'Unit' : '\u0627\u0644\u0648\u062d\u062f\u0629', en ? 'Price' : '\u0627\u0644\u0633\u0639\u0631', en ? 'Cost' : '\u0627\u0644\u062a\u0643\u0644\u0641\u0629', en ? 'Margin' : '\u0627\u0644\u0647\u0627\u0645\u0634'],
+              headers: [en ? 'Name' : '\u0627\u0644\u0627\u0633\u0645', en ? 'Category' : '\u0627\u0644\u0641\u0626\u0629', en ? 'Unit' : '\u0627\u0644\u0648\u062d\u062f\u0629', en ? 'Price' : '\u0627\u0644\u0633\u0639\u0631', en ? 'Cost' : '\u0627\u0644\u062a\u0643\u0644\u0641\u0629', en ? 'Stock' : '\u0627\u0644\u0643\u0645\u064a\u0629', en ? 'Margin' : '\u0627\u0644\u0647\u0627\u0645\u0634'],
               rows: app.products.map((p) => [
                 en ? p.nameEn : p.nameAr,
                 p.category,
                 p.unit,
                 p.price.toStringAsFixed(2),
                 p.costPrice.toStringAsFixed(2),
+                p.stock.toStringAsFixed(0),
                 '${p.price > 0 ? ((p.price - p.costPrice) / p.price * 100).toStringAsFixed(1) : "0"}%',
               ]).toList(),
             ),
@@ -116,13 +121,23 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
           style: TextStyle(color: context.mutedColor),
         ),
         const SizedBox(height: 8),
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: TextButton.icon(
-            onPressed: () => _addCategoryDialog(context, app, en),
-            icon: const Icon(Icons.create_new_folder_outlined, size: 20),
-            label: Text(en ? 'Add section' : '\u0625\u0636\u0627\u0641\u0629 \u0642\u0633\u0645'),
-          ),
+Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const AdminProductImportScreen(),
+              )),
+              icon: const Icon(Icons.upload_file_outlined, size: 20),
+              label: Text(en ? 'Import from Excel' : 'رفع شيت اكسيل'),
+            ),
+            TextButton.icon(
+              onPressed: () => _addCategoryDialog(context, app, en),
+              icon: const Icon(Icons.create_new_folder_outlined, size: 20),
+              label: Text(en ? 'Add section' : 'إضافة قسم'),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         _buildForm(context, app, en),
@@ -317,6 +332,12 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _stock,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: false),
+              decoration: InputDecoration(hintText: en ? 'Stock quantity (initial amount)' : '\u0627\u0644\u0643\u0645\u064a\u0629 (\u0627\u0644\u0631\u0635\u064a\u062f)'),
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -349,6 +370,7 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
                               'unit': _unit.text.isEmpty ? 'unit' : _unit.text,
                               'price': newPrice,
                               'costPrice': double.tryParse(_costPrice.text) ?? 0,
+                              'stock': double.tryParse(_stock.text) ?? 0,
                               'nameEn': _nameEn.text,
                               'nameAr': _nameAr.text,
                               'descEn': _descEn.text,
@@ -360,6 +382,7 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
                             if (oldPrice != null && oldPrice != newPrice) {
                               await app.sendPriceUpdate(product: saved, oldPrice: oldPrice);
                               ApiService.notifyPriceUpdate(
+                                token: app.token ?? '',
                                 productNameEn: saved.nameEn,
                                 productNameAr: saved.nameAr,
                                 oldPrice: oldPrice,
@@ -408,7 +431,8 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
         title: Text(en ? p.nameEn : p.nameAr),
         subtitle: Text(
           '${en ? 'EGP' : '\u062c.\u0645'} ${p.price.toStringAsFixed(2)} / ${p.unit}\n'
-          '${en ? 'Cost' : '\u0627\u0644\u062a\u0643\u0644\u0641\u0629'}: ${en ? 'EGP' : '\u062c.\u0645'} ${p.costPrice.toStringAsFixed(2)}',
+          '${en ? 'Cost' : '\u0627\u0644\u062a\u0643\u0644\u0641\u0629'}: ${en ? 'EGP' : '\u062c.\u0645'} ${p.costPrice.toStringAsFixed(2)} • '
+          '${en ? 'Stock' : '\u0627\u0644\u0643\u0645\u064a\u0629'}: ${p.stock.toStringAsFixed(0)}',
           textDirection: TextDirection.ltr,
         ),
         trailing: Row(
@@ -429,6 +453,7 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
                 _unitChoice = unitMap[p.unit] ?? '\u0643\u064a\u0644\u0648';
                 _price.text = p.price.toString();
                 _costPrice.text = p.costPrice.toString();
+                _stock.text = p.stock.toStringAsFixed(0);
                 _category = p.category;
                 setState(() {});
               },
@@ -495,6 +520,7 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
     _descEnFor = '';
     _price.clear();
     _costPrice.clear();
+    _stock.clear();
     setState(() {});
   }
 }
