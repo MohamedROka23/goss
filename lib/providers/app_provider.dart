@@ -715,10 +715,14 @@ class AppProvider extends ChangeNotifier {
       }
       if (matched == null && _admins.isNotEmpty) matched = _admins.first;
     }
-    _currentAdmin = matched;
+    // Only overwrite _currentAdmin when the team list confirms a profile.
+    // When loadAdmins fails (e.g. a delegate lacks the "team" permission to
+    // read the full list) the server-authoritative profile set during login
+    // is already in _currentAdmin and must be preserved — never overwrite it
+    // with null, or all panels disappear.
     if (matched != null) {
-      _cachedPermissions = matched.permissions.isNotEmpty ? matched.permissions : defaultPermissionsFor(matched.role);
       _currentAdmin = matched;
+      _cachedPermissions = matched.permissions.isNotEmpty ? matched.permissions : defaultPermissionsFor(matched.role);
       _activeRole = matched.role;
     } else if (_currentAdmin == null && _adminEmail.isNotEmpty) {
       // A named login that no longer matches any team member (e.g. deleted by

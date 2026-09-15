@@ -165,20 +165,24 @@ class FirestoreBackend implements GossBackend {
       );
       final uid = cred.user?.uid ?? 'firebase-admin';
       // A deleted member is fully blocked: after sign-in, confirm the admins
-      // document still exists. If removed, revoke immediately so the
-      // Firebase Auth session becomes useless.
+      // document actually exists. If it is gone (or Firestore refuses to let
+      // us read it) the auth session is revoked immediately and login fails —
+      // a deleted account can never reach the admin panels.
+      DocumentSnapshot snap;
       try {
-        final snap = await _db.collection('admins').doc(uid).get();
-        if (!snap.exists || snap.data() == null) {
-          // Sign out right away — this is not a valid team member.
-          await _auth.signOut();
-          throw Exception('This account has been deactivated');
-        }
-        _lastServerProfile =
-            AdminUser.fromJson({...snap.data()!, 'id': uid, 'email': email.trim()});
-      } catch (e) {
-        if (e.toString().contains('deactivated')) rethrow;
+        snap = await _db.collection('admins').doc(uid).get();
+      } catch (_) {
+        // Read denied or document missing -> not an active team member.
+        await _auth.signOut();
+        throw Exception('This account has been deactivated');
       }
+      if (!snap.exists || snap.data() == null) {
+        await _auth.signOut();
+        throw Exception('This account has been deactivated');
+      }
+      final data = snap.data() as Map<String, dynamic>;
+      _lastServerProfile =
+          AdminUser.fromJson({...data, 'id': uid, 'email': email.trim()});
       return uid;
     } on FirebaseAuthException catch (e) {
       throw Exception(e.message ?? 'Login failed');
