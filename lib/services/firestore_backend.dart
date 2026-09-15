@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 
 import '../models/models.dart';
@@ -18,6 +19,11 @@ class FirestoreBackend implements GossBackend {
   BackendMode get mode => BackendMode.firebase;
   @override
   bool get isFirebase => true;
+
+  AdminUser? _lastServerProfile;
+
+  @override
+  AdminUser? lastServerProfile() => _lastServerProfile;
 
   FirebaseFirestore get _db => FirebaseFirestore.instance;
   FirebaseAuth get _auth => FirebaseAuth.instance;
@@ -157,7 +163,23 @@ class FirestoreBackend implements GossBackend {
         email: email.trim(),
         password: password,
       );
-      return cred.user?.uid ?? 'firebase-admin';
+      final uid = cred.user?.uid ?? 'firebase-admin';
+      // A deleted member is fully blocked: after sign-in, confirm the admins
+      // document still exists. If removed, revoke immediately so the
+      // Firebase Auth session becomes useless.
+      try {
+        final snap = await _db.collection('admins').doc(uid).get();
+        if (!snap.exists || snap.data() == null) {
+          // Sign out right away — this is not a valid team member.
+          await _auth.signOut();
+          throw Exception('This account has been deactivated');
+        }
+        _lastServerProfile =
+            AdminUser.fromJson({...snap.data()!, 'id': uid, 'email': email.trim()});
+      } catch (e) {
+        if (e.toString().contains('deactivated')) rethrow;
+      }
+      return uid;
     } on FirebaseAuthException catch (e) {
       throw Exception(e.message ?? 'Login failed');
     }
@@ -332,21 +354,6 @@ class FirestoreBackend implements GossBackend {
     if (resp.statusCode != 200 || body['localId'] == null) {
       final raw = (body['error'] as Map<String, dynamic>?)?['message'];
       if (raw == 'EMAIL_EXISTS') {
-        // Account already exists in Auth. If its /admins document is missing
-        // (old registration under stricter rules) or the member got removed,
-        // re-adding it should simply restore the document. Verify the entered
-        // password so only the account owner can claim it.
-        final uid = await _resolveUidByPassword(email.trim(), password);
-        if (uid != null && uid.isNotEmpty) {
-          await _db.collection('admins').doc(uid).set({
-            'name': name,
-            'email': email.trim(),
-            'role': role,
-            'permissions': permissions,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-          return;
-        }
         throw Exception('An account with this email already exists');
       }
       throw Exception(raw is String ? raw : 'Registration failed');
@@ -360,32 +367,6 @@ class FirestoreBackend implements GossBackend {
       'permissions': permissions,
       'createdAt': FieldValue.serverTimestamp(),
     });
-  }
-
-  /// Resolves the existing auth uid for [email] by verifying the password via
-  /// the REST API. Unlike signInWithEmailAndPassword this never swaps the
-  /// current SDK session, so the caller keeps acting as the signed-in admin.
-  /// Returns null when the credentials are wrong.
-  Future<String?> _resolveUidByPassword(String email, String password) async {
-    final apiKey = _auth.app.options.apiKey;
-    final resp = await http.post(
-      Uri.parse(
-        'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$apiKey',
-      ),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'email': email,
-        'password': password,
-        'returnSecureToken': true,
-      }),
-    );
-    if (resp.statusCode != 200) return null;
-    try {
-      final body = jsonDecode(resp.body) as Map<String, dynamic>;
-      return body['localId'] as String?;
-    } catch (_) {
-      return null;
-    }
   }
 
   @override
@@ -403,7 +384,22 @@ class FirestoreBackend implements GossBackend {
 
   @override
   Future<void> deleteAdmin(String token, String id) async {
+    // 1) Remove the Firestore document (denies rules-level access).
     await _db.collection('admins').doc(id).delete();
+    // 2) Best-effort: ask the server to hard-delete the Firebase Auth user
+    //    so the email/password can never be used again. Fails silently if
+    //    the server is unreachable (defense-in-depth only).
+    try {
+      final baseUrl = await BackendSettings.loadBaseUrl();
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/firestore/delete-auth-user'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'uid': id}),
+      );
+      if (res.statusCode != 200) {
+        debugPrint('[deleteAdmin] auth delete returned ${res.statusCode}');
+      }
+    } catch (_) {}
   }
 
   @override

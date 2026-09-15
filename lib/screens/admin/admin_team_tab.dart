@@ -51,10 +51,9 @@ class _AdminTeamTabState extends State<AdminTeamTab> {
     });
   }
 
-  /// Permission toggles shown in the add form (team is granted to admins only).
+  /// Permission toggles shown in the add form.
   List<Widget> _permissionTiles(bool en, Set<String> perms) {
     return allPermissionKeys
-        .where((p) => p != AdminPerms.team)
         .map((p) => CheckboxListTile(
               dense: true,
               controlAffinity: ListTileControlAffinity.leading,
@@ -124,7 +123,7 @@ class _AdminTeamTabState extends State<AdminTeamTab> {
                   const Divider(),
                   Text(en ? 'Panels this member can open' : 'الأقسام المتاح لهذا العضو فتحها', style: const TextStyle(fontWeight: FontWeight.w700)),
                   ...allPermissionKeys.map((p) {
-                    final locked = role == AdminRole.super_ || p == AdminPerms.team;
+                    final locked = role == AdminRole.super_;
                     if (locked) return const SizedBox.shrink();
                     return CheckboxListTile(
                       dense: true,

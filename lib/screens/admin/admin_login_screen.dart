@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
 import '../../widgets/widgets.dart';
-import '../../models/models.dart';
 import 'quick_sign_in_setup_sheet.dart';
 import 'forgot_password_sheet.dart';
 
@@ -17,7 +16,6 @@ class AdminLoginScreen extends StatefulWidget {
 
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
   int _mode = 0; // 0 = sign in, 1 = register
-  String? _loginRole; // null = account default, AdminRole.admin / AdminRole.delegate
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
@@ -120,31 +118,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                 if (_mode == 0) ...[
                   const SizedBox(height: 16),
                   Text(
-                    en ? 'Sign in as' : 'تسجيل الدخول كـ',
+                    en
+                        ? 'Your role is applied automatically from your account'
+                        : 'يتم تحديد دورك تلقائياً من الحساب',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: context.mutedColor, fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  SegmentedButton<String>(
-                    segments: [
-                      ButtonSegment(
-                        value: AdminRole.admin,
-                        label: Text(en ? 'Admin' : 'مسؤول'),
-                        icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
-                      ),
-                      ButtonSegment(
-                        value: AdminRole.delegate,
-                        label: Text(en ? 'Delegate' : 'مندوب'),
-                        icon: const Icon(Icons.support_agent_outlined, size: 18),
-                      ),
-                    ],
-                    selected: {_loginRole ?? AdminRole.admin},
-                    onSelectionChanged: (s) {
-                      setState(() {
-                        _loginRole = s.first;
-                        _error = null;
-                      });
-                    },
                   ),
                 ],
                 if (_mode == 0 && _enrolled) ...[
@@ -310,7 +288,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       return;
     }
     final navigator = Navigator.of(context);
-    final ok = await app.loginAdmin(email, password, role: _loginRole);
+    final ok = await app.loginAdmin(email, password);
     if (!mounted) return;
     if (ok) {
       _qsAttempts = 0;
@@ -464,8 +442,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       });
       return;
     }
-    final role = app.quickSignInRole.isEmpty ? null : app.quickSignInRole;
-    final ok = await app.loginAdmin(email, password, role: role);
+    final ok = await app.loginAdmin(email, password);
     if (!mounted) return;
     setState(() {
       _loading = false;

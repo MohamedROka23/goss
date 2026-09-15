@@ -12,6 +12,11 @@ class HttpBackend implements GossBackend {
 
   HttpBackend(this.baseUrl);
 
+  AdminUser? _lastServerProfile;
+
+  @override
+  AdminUser? lastServerProfile() => _lastServerProfile;
+
   @override
   BackendMode get mode => BackendMode.http;
   @override
@@ -79,6 +84,10 @@ class HttpBackend implements GossBackend {
     );
     _check(res);
     final data = await _decode(res);
+    final rawUser = data['user'];
+    _lastServerProfile = rawUser is Map<String, dynamic>
+        ? AdminUser.fromJson(rawUser)
+        : null;
     return data['token'];
   }
 

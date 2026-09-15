@@ -625,11 +625,14 @@ class AppProvider extends ChangeNotifier {
       await prefs.remove('goss-token');
       _adminEmail = email.trim();
       await SecureStore.writeAdminEmail(_adminEmail);
-      _currentAdmin = null;
+      // The server (HTTP) / admins record (Firestore) decides the member's
+      // role and permissions. A user-chosen role from the login screen is
+      // never trusted for delegation in the other direction.
+      _currentAdmin = backend.lastServerProfile();
       _cachedPermissions = null;
       _quickLocked = false;
       await prefs.setBool('goss-quicklock-locked', false);
-      _activeRole = (role == AdminRole.delegate || role == AdminRole.admin) ? role : null;
+      _activeRole = backend.lastServerProfile()?.role;
       if (_activeRole != null) await SecureStore.writeAdminRole(_activeRole!);
       _error = null;
       notifyListeners();
@@ -666,10 +669,15 @@ class AppProvider extends ChangeNotifier {
   /// Effective permissions of the logged-in team member.
   List<String> get permissions {
     if (isOwner) return allPermissionKeys;
+    // A named login that no longer resolves to any team member is treated as
+    // having zero permissions (never escalates to the full admin set).
+    if (_currentAdmin == null && _adminEmail.isNotEmpty) {
+      return const [];
+    }
     final granted = _currentAdmin?.permissions.isNotEmpty == true
         ? _currentAdmin!.permissions
         : (_cachedPermissions?.isNotEmpty == true ? _cachedPermissions! : defaultPermissionsFor(_currentAdmin?.role ?? AdminRole.admin));
-    // If the member chose to sign in as a delegate, limit them to the
+    // If the member signed in under a delegate role, limit them to the
     // delegate panels (never escalates beyond what the owner granted).
     if (_activeRole == AdminRole.delegate) {
       final delegateSet = defaultPermissionsFor(AdminRole.delegate).toSet();
@@ -710,6 +718,13 @@ class AppProvider extends ChangeNotifier {
     _currentAdmin = matched;
     if (matched != null) {
       _cachedPermissions = matched.permissions.isNotEmpty ? matched.permissions : defaultPermissionsFor(matched.role);
+      _currentAdmin = matched;
+      _activeRole = matched.role;
+    } else if (_currentAdmin == null && _adminEmail.isNotEmpty) {
+      // A named login that no longer matches any team member (e.g. deleted by
+      // the owner) must NOT keep its prior permissions: block it here rather
+      // than falling back to the full panel set.
+      _cachedPermissions = const [];
     }
     await SecureStore.writeAdminPermissions(permissions.toList());
     notifyListeners();

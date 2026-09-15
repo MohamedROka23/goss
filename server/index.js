@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { initializeApp, applicationDefault } from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
+import { getAuth } from "firebase-admin/auth";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,20 @@ function sessionUser(token) {
     sessions.delete(token);
     return null;
   }
+  // Deleted accounts are blocked immediately: if the team member no longer
+  // exists (or was switched to a blocked state) the token stops working even
+  // before its expiry, so a removed admin cannot keep using the app.
+  const db = loadDb();
+  const live = (db.users || []).find((u) => u.id === s.id);
+  if (!live) {
+    sessions.delete(token);
+    return null;
+  }
+  // Reflect live role/permission changes on the next request so a promoted/
+  // demoted member immediately sees the correct panels (never the stale set
+  // captured at login time).
+  s.role = live.role ?? s.role;
+  s.permissions = [...(live.permissions || [...DEFAULT_PERMISSIONS.admin])];
   s.lastSeen = now;
   return s;
 }
@@ -579,6 +594,7 @@ function requireRole(...roles) {
 
 let fcmDb = null;
 let fcmMessaging = null;
+let fcmAuth = null;
 let fcmProm = null;
 
 async function initFcm() {
@@ -598,6 +614,7 @@ async function initFcm() {
         await getFirestore(app).collection("init_probe").limit(1).get().catch(() => {});
         fcmDb = getFirestore(app);
         fcmMessaging = getMessaging(app);
+        fcmAuth = getAuth(app);
         return true;
       } catch (e) {
         console.error("FCM unavailable:", e.message);
@@ -738,7 +755,13 @@ app.post("/api/login", (req, res) => {
     });
   }
   clearLoginFailures(ip, email);
-  res.json({ token: issueSession(user) });
+  // The server - not the client - decides the member's role and permissions,
+  // so a delegate can never request an "admin" sign-in and an admin always
+  // lands on their real panels. The app uses these as the source of truth.
+  res.json({
+    token: issueSession(user),
+    user: publicUser(user),
+  });
 });
 
 app.post("/api/register", (req, res) => {
@@ -881,7 +904,36 @@ app.delete("/api/admins/:id", auth, requirePerm("team"), (req, res) => {
   if (target.role === "super") return res.status(403).json({ error: "Cannot remove a super admin" });
   db.users.splice(i, 1);
   saveDb(db);
+  // Revoke every live session owned by the removed member so a deleted
+  // account cannot keep using its previously-issued token.
+  for (const [tok, s] of sessions) {
+    if (s.id === target.id) sessions.delete(tok);
+  }
   res.json({ ok: true });
+});
+
+// Hard-deletes a Firebase Authentication user so a removed team member can
+// never sign back in with the old email/password. Requires the Admin SDK to
+// be configured (GOOGLE_APPLICATION_CREDENTIALS) — otherwise returns 503 and
+// the app removes the Firestore document anyway (defense in depth).
+app.post("/api/firestore/delete-auth-user", (req, res) => {
+  const uid = (req.body || {}).uid;
+  if (typeof uid !== "string" || !uid) {
+    return res.status(400).json({ error: "Missing uid" });
+  }
+  if (!fcmAuth) {
+    return res.status(503).json({
+      error: "Admin SDK not configured; set GOOGLE_APPLICATION_CREDENTIALS",
+    });
+  }
+  (async () => {
+    try {
+      await fcmAuth.deleteUser(uid);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message || "Delete failed" });
+    }
+  })();
 });
 
 app.post("/api/products", auth, requireRole("super", "admin"), (req, res) => {

@@ -25,6 +25,12 @@ abstract class GossBackend {
     required List<Map<String, dynamic>> products,
   });
   Future<String> loginAdmin(String email, String password);
+
+  /// After a successful [loginAdmin], the *server-authoritative* profile for
+  /// the signed-in member (role + granted permissions). The server decides a
+  /// member's role; the client must never trust a user-chosen role from the
+  /// login screen.
+  AdminUser? lastServerProfile();
   Future<void> registerAdmin(String name, String email, String password, String code);
 
   /// True when [email] + [password] are valid on the server. Used to authorize
