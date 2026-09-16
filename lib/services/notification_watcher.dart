@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/chat_models.dart';
-import '../models/models.dart' show requestStatusLabel;
+import '../models/models.dart' show CustomerRequest, requestStatusLabel;
 import 'chat_store.dart';
 import 'fcm_service.dart';
 
@@ -105,13 +105,43 @@ class NotificationWatcher {
       // "New" orders only interest the team; the customer follows their own.
       q = q.where('status', isEqualTo: 'new');
     }
+    var firstSnapshot = true;
     _subs.add(q.snapshots().listen((snap) {
+      if (firstSnapshot) {
+        // First snapshot is the baseline; never notify past events.
+        firstSnapshot = false;
+        for (final doc in snap.docs) {
+          _requestStatus[doc.id] = doc['status'] as String? ?? 'new';
+        }
+        return;
+      }
       for (final doc in snap.docs) {
+        final type = doc['type'] as String? ?? 'supply';
         final status = doc['status'] as String? ?? 'new';
         final prev = _requestStatus[doc.id];
         if (prev == null) {
-          // First snapshot is the baseline; never notify past events.
+          // A genuinely new document appeared after the baseline.
           _requestStatus[doc.id] = status;
+          if (customerId != null) {
+            // Customer side: fresh tracks come from the admin changing status.
+            continue;
+          }
+          // Admin side: a fresh price quote pops a notification right away.
+          if (type == 'quote') {
+            try {
+              final name = doc['name'] as String? ?? '';
+              final company = doc['company'] as String? ?? '';
+              final code = CustomerRequest.fromJson({...doc.data(), 'id': doc.id}).orderLabel;
+              FcmService.instance.showLocal(
+                title: 'GOSST — عرض سعر جديد / New price quote',
+                body: '$code — $name · $company',
+                payload: _json({
+                  'type': 'new_quote',
+                  'requestId': doc.id,
+                }),
+              );
+            } catch (_) {}
+          }
           continue;
         }
         _requestStatus[doc.id] = status;

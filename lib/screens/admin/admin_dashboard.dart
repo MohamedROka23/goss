@@ -9,6 +9,7 @@ import '../../app/theme.dart';
 import '../../models/models.dart';
 import '../../services/notification_watcher.dart';
 import 'admin_quotes_tab.dart';
+import 'admin_price_quotes_tab.dart';
 import 'admin_purchases_tab.dart';
 import 'admin_profit_tab.dart';
 import 'admin_requests_tab.dart';
@@ -70,6 +71,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     final tabs = <(String, _Tab, Widget)>[
       (AdminPerms.requests, _Tab(title: en ? 'Requests' : '\u0627\u0644\u0637\u0644\u0628\u0627\u062a', icon: Icons.inbox_outlined), const AdminRequestsTab()),
+      (AdminPerms.requests, _Tab(title: en ? 'Price Quotes' : '\u0639\u0631\u0648\u0636 \u0627\u0644\u0623\u0633\u0639\u0627\u0631', icon: Icons.request_quote_outlined), const AdminPriceQuotesTab()),
       (AdminPerms.tracking, _Tab(title: en ? 'Tracking' : '\u0627\u0644\u062a\u0631\u0627\u0643\u0646\u062c \u0623\u0648\u0631\u062f\u0631', icon: Icons.route_outlined), const AdminTrackingTab()),
       (AdminPerms.customers, _Tab(title: en ? 'Customers' : '\u0627\u0644\u0639\u0645\u0644\u0627\u0621', icon: Icons.people_outline), const AdminCustomersTab()),
       (AdminPerms.quotes, _Tab(title: en ? 'Quotes' : '\u0639\u0631\u0648\u0636', icon: Icons.storefront_outlined), const AdminQuotesTab()),

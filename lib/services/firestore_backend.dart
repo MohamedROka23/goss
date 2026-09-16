@@ -28,6 +28,19 @@ class FirestoreBackend implements GossBackend {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
   FirebaseAuth get _auth => FirebaseAuth.instance;
 
+  /// Generates the next sequential number for a given counter key using a
+  /// Firestore transaction. Each operation type uses its own counter doc so
+  /// quotes, supply requests, and purchases each start from 1.
+  Future<int> _nextSequence(String key) async {
+    final ref = _db.collection('counters').doc(key);
+    return _db.runTransaction<int>((tx) async {
+      final snap = await tx.get(ref);
+      final next = ((snap.data()?['value'] as num?) ?? 0).toInt() + 1;
+      tx.set(ref, {'value': next});
+      return next;
+    });
+  }
+
   @override
   Future<List<ProductCategory>> fetchCategories() async {
     final snap = await _db.collection('categories').orderBy('order').get();
@@ -409,6 +422,8 @@ class FirestoreBackend implements GossBackend {
   @override
   Future<CustomerRequest> submitRequest(Map<String, dynamic> payload) async {
     final doc = _db.collection('requests').doc();
+    final type = payload['type'] ?? 'supply';
+    final orderNo = await _nextSequence(type == 'quote' ? 'quote' : 'supply');
     final request = <String, dynamic>{
       'company': payload['company'] ?? '',
       'name': payload['name'] ?? '',
@@ -417,10 +432,12 @@ class FirestoreBackend implements GossBackend {
       'notes': payload['notes'] ?? '',
       'items': payload['items'] ?? [],
       'status': 'new',
-      'type': payload['type'] ?? 'supply',
+      'type': type,
       'customerId': payload['customerId'] ?? '',
       'origin': payload['origin'] ?? '',
       'destination': payload['destination'] ?? '',
+      'orderNo': orderNo,
+      'vat': payload['vat'] ?? false,
       'createdAt': FieldValue.serverTimestamp(),
       'uid': _auth.currentUser?.uid ?? '',
     };
@@ -602,7 +619,9 @@ class FirestoreBackend implements GossBackend {
     final qty = (data['qty'] as num?)?.toInt() ?? 0;
     final cost = (data['costPrice'] as num?)?.toDouble() ?? 0;
     final vat = (data['vat'] as num?)?.toDouble() ?? 0;
+    final orderNo = await _nextSequence('purchase');
     final payload = <String, dynamic>{
+      'orderNo': orderNo,
       'date': DateTime.now().toUtc().toIso8601String(),
       'supplier': data['supplier'] ?? '',
       'productId': data['productId'] ?? '',

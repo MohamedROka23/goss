@@ -68,10 +68,14 @@ class _AdminTrackingTabState extends State<AdminTrackingTab> {
     final app = context.watch<AppProvider>();
     final admin = context.watch<AdminProvider>();
     final en = !app.isArabic;
-    final requests = admin.requests;
+    // Tracking only exists for supply orders and only after the admin has
+    // accepted them — price quotes never appear here.
+    final requests = admin.requests.where((r) => r.type == 'supply').toList();
     final baseList = _showArchive
         ? requests.where((r) => r.archived || RequestStatus.isDone(r.status)).toList()
-        : requests.where((r) => !r.archived && !RequestStatus.isDone(r.status)).toList();
+        : requests
+            .where((r) => !r.archived && !RequestStatus.isDone(r.status) && r.status != RequestStatus.fresh)
+            .toList();
     final filterStr = _filterDate == null ? null : DateFormat('yyyy-MM-dd').format(_filterDate!);
     final query = _search.text.trim().toLowerCase();
     final filtered = baseList.where((r) {

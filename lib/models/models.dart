@@ -226,6 +226,9 @@ class CustomerRequest {
   /// convert action cannot be repeated and duplicate orders are never created.
   final bool converted;
 
+  /// Whether 14% VAT was included in the quote total.
+  final bool vat;
+
   CustomerRequest({
     required this.id,
     this.orderNo = 0,
@@ -243,12 +246,16 @@ class CustomerRequest {
     this.type = 'supply',
     this.archived = false,
     this.converted = false,
+    this.vat = false,
   });
 
-  /// Human-readable order reference: sequential #orderNo when available,
-  /// falling back to the short document id (Firestore has no counter).
-  String get orderLabel =>
-      orderNo > 0 ? '#$orderNo' : '#${id.split('-').first}';
+  /// Human-readable sequential reference for the request:
+  /// quotes GOSSTS01..., supply requests GOSSTT001... When no sequential
+  /// number has been assigned yet, falls back to the short document id.
+  String get orderLabel {
+    if (orderNo > 0) return requestCodeFor(type, orderNo);
+    return '#${id.split('-').first}';
+  }
 
   static String _dateToString(dynamic v) {
     if (v == null) return '';
@@ -289,6 +296,7 @@ class CustomerRequest {
       type: json['type'] ?? 'supply',
       archived: json['archived'] ?? false,
       converted: json['converted'] ?? false,
+      vat: json['vat'] ?? false,
     );
   }
 }
@@ -453,6 +461,7 @@ class Payment {
 
 class Purchase {
   final String id;
+  final int orderNo;
   final String date;
   final String supplier;
   final String productId;
@@ -467,6 +476,7 @@ class Purchase {
 
   Purchase({
     required this.id,
+    this.orderNo = 0,
     required this.date,
     required this.supplier,
     required this.productId,
@@ -476,9 +486,13 @@ class Purchase {
     required this.total,
   });
 
+  String get code => purchaseCodeFor(orderNo);
+
   factory Purchase.fromJson(Map<String, dynamic> json) {
+    final rawOrder = json['orderNo'];
     return Purchase(
       id: json['id'] ?? '',
+      orderNo: rawOrder is num ? rawOrder.toInt() : 0,
       date: json['date'] ?? '',
       supplier: json['supplier'] ?? '',
       productId: json['productId'] ?? '',
@@ -490,6 +504,7 @@ class Purchase {
   }
 
   Map<String, dynamic> toJson() => {
+        'orderNo': orderNo,
         'date': date,
         'supplier': supplier,
         'productId': productId,
@@ -598,6 +613,19 @@ String requestStatusLabel(String status, {required bool ar}) {
 /// the acceptance push notification.
 String deliveryPromiseNote({required bool ar}) =>
     ar ? 'سيتم التسليم خلال 48 ساعة من وقت قبول الطلب.' : 'Delivery will be completed within 48 hours from order acceptance.';
+
+/// Sequential code generators. Each operation type has its own prefix and
+/// zero-padded digit count so codes are unique and identifiable.
+String requestCodeFor(String type, int orderNo) {
+  if (orderNo <= 0) return '';
+  if (type == 'quote') return 'GOSSTS${orderNo.toString().padLeft(2, '0')}';
+  return 'GOSSTT${orderNo.toString().padLeft(3, '0')}';
+}
+
+String purchaseCodeFor(int orderNo) {
+  if (orderNo <= 0) return '';
+  return 'GOSSTP${orderNo.toString().padLeft(4, '0')}';
+}
 
 /// Admin roles: super (owner), admin (full/permission-gated team member),
 /// delegate (field/fulfilment agent), each granted permissions by the owner.

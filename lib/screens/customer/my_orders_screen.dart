@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
 import '../../models/models.dart';
+import '../../services/export_service.dart';
 import '../../widgets/widgets.dart';
 
 class MyOrdersScreen extends StatefulWidget {
@@ -257,6 +258,31 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                     const SizedBox(width: 6),
                     RequestStatusChip(status: r.status, isArabic: !en),
                     const SizedBox(width: 4),
+                    if (isQuote)
+                      IconButton(
+                        tooltip: en ? 'Print quote as PDF' : 'طباعة عرض السعر PDF',
+                        icon: const Icon(Icons.picture_as_pdf_outlined, size: 20, color: GossColors.red),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _acting
+                            ? null
+                            : () async {
+                          setState(() => _acting = true);
+                          try {
+                            await ExportService.exportPriceQuote(r, isArabic: !en);
+                          } catch (_) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: Text(en
+                                    ? 'Could not generate the PDF. Try again.'
+                                    : 'تعذر إنشاء الملف PDF. حاول مرة أخرى.'),
+                                backgroundColor: GossColors.red,
+                              ));
+                            }
+                          } finally {
+                            if (mounted) setState(() => _acting = false);
+                          }
+                        },
+                      ),
                     IconButton(
                       tooltip: r.archived
                           ? (en ? 'Restore from archive' : 'استعادة من الأرشيف')

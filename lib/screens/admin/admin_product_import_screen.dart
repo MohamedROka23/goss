@@ -26,22 +26,34 @@ class _AdminProductImportScreenState extends State<AdminProductImportScreen> {
   Future<void> _shareTemplate(bool en) async {
     try {
       final bytes = buildProductImportTemplate();
+      if (bytes.isEmpty) throw Exception('empty template');
+      // Write into the app cache (guaranteed accessible via FileProvider on
+      // every Android version; getTemporaryDirectory() occasionally points to
+      // a no-share zone on OEM skins).
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/GOSST-products-template.xlsx');
       await file.writeAsBytes(bytes, flush: true);
-      await SharePlus.instance.share(
+      final xfile = XFile(file.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      final shareResult = await SharePlus.instance.share(
         ShareParams(
-          files: [
-            XFile(file.path,
-                mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
-          ],
-          fileNameOverrides: ['GOSST-products-template.xlsx'],
+          files: [xfile],
+          fileNameOverrides: [xfile.name],
         ),
       );
-    } catch (_) {
+      if (shareResult.status == ShareResultStatus.dismissed && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(en
+              ? 'Share sheet closed without selecting an app.'
+              : 'تم إغلاق نافذة المشاركة بدون اختيار تطبيق.'),
+          duration: const Duration(seconds: 2),
+        ));
+      }
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(en ? 'Unable to create the template.' : 'تعذر إنشاء القالب.'),
+        content: Text(en
+            ? 'Unable to create the template. ($e)'
+            : 'تعذر إنشاء القالب. ($e)'),
         backgroundColor: GossColors.red,
       ));
     }

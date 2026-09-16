@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart';
 import 'package:share_plus/share_plus.dart';
+import '../models/models.dart';
 
 class ExportService {
   static final _arabicPattern = RegExp(r'[\u0600-\u06FF]');
@@ -23,19 +24,47 @@ class ExportService {
     return ar ? 'تاريخ الإنشاء: $date' : 'Generated: $date';
   }
 
+  /// Sanitizes a display title into an ASCII file name so Android's
+  /// FileProvider / share intent never sees Arabic, spaces or slashes.
+  static String _safeFileName(String name) {
+    var ext = '';
+    final dot = name.lastIndexOf('.');
+    if (dot != -1) {
+      ext = name.substring(dot).toLowerCase();
+      name = name.substring(0, dot);
+    }
+    var sb = StringBuffer();
+    for (final unit in name.codeUnits) {
+      if ((unit >= 48 && unit <= 57) || // 0-9
+          (unit >= 65 && unit <= 90) || // A-Z
+          (unit >= 97 && unit <= 122)) {
+        sb.writeCharCode(unit);
+      } else if (unit == 32) {
+        sb.writeCharCode(45); // space -> hyphen
+      }
+    }
+    var clean = sb.toString();
+    while (clean.endsWith('-')) {
+      clean = clean.substring(0, clean.length - 1);
+    }
+    if (clean.isEmpty) clean = 'GOSST-file';
+    return '$clean$ext';
+  }
+
   static Future<File> _writeToTemp(Uint8List bytes, String name) async {
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/$name');
+    final file = File('${dir.path}/${_safeFileName(name)}');
     return file.writeAsBytes(bytes, flush: true);
   }
 
   static Future<void> _share(File file, String displayName) async {
     final mime = displayName.endsWith('.pdf') ? 'application/pdf'
         : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    final xfile = XFile(file.path, mimeType: mime);
     await SharePlus.instance.share(
       ShareParams(
-        files: [XFile(file.path, mimeType: mime)],
-        fileNameOverrides: [displayName],
+        files: [xfile],
+        fileNameOverrides: [xfile.name],
       ),
     );
   }
@@ -138,7 +167,195 @@ class ExportService {
     await _share(file, '$title.pdf');
   }
 
-  // -------------------------------------------------------------------------
+  /// Exports a customer price quote as a proper A4 PDF document showing the
+  /// customer details, every line item, the subtotal, the optional 14% VAT,
+  /// and the final total. The file is shared so the customer can save/print it.
+  static Future<void> exportPriceQuote(
+    CustomerRequest request, {
+    required bool isArabic,
+  }) async {
+    final baseFont = pw.Font.ttf(await rootBundle.load('assets/fonts/Amiri-Regular.ttf'));
+    final boldFont = pw.Font.ttf(await rootBundle.load('assets/fonts/Amiri-Bold.ttf'));
+    final navy = PdfColor.fromInt(_navy);
+    final stamp = _formatStamp(DateTime.now(), isArabic);
+
+    final subtotal = request.items.fold<double>(0, (n, i) => n + i.price * i.qty);
+    final vat = request.vat ? subtotal * 0.14 : 0.0;
+    final total = subtotal + vat;
+
+    final doc = pw.Document(
+      theme: pw.ThemeData.withFont(base: baseFont, bold: boldFont),
+    );
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        textDirection: isArabic ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        build: (ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('GOSST', style: pw.TextStyle(font: boldFont, fontSize: 20, color: navy)),
+                pw.Text(stamp, style: pw.TextStyle(font: baseFont, fontSize: 9, color: PdfColors.blueGrey600)),
+              ],
+            ),
+            pw.Divider(color: navy, thickness: 1.4),
+            pw.SizedBox(height: 14),
+            pw.Text(
+              isArabic ? 'عرض سعر' : 'Price Quote',
+              style: pw.TextStyle(font: boldFont, fontSize: 24, color: navy),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              '${isArabic ? 'رقم العرض' : 'Quote No.'}: ${request.orderLabel}',
+              style: pw.TextStyle(font: baseFont, fontSize: 13, color: PdfColors.blueGrey800),
+            ),
+            pw.SizedBox(height: 16),
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      _info((isArabic ? 'الشركة' : 'Company'), request.company.isEmpty ? '—' : request.company, baseFont),
+                      _info((isArabic ? 'اسم المسؤول' : 'Contact'), request.name, baseFont),
+                      _info((isArabic ? 'الهاتف' : 'Phone'), request.phone.isEmpty ? '—' : request.phone, baseFont),
+                      _info((isArabic ? 'البريد' : 'Email'), request.email.isEmpty ? '—' : request.email, baseFont),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 18),
+            pw.TableHelper.fromTextArray(
+              headers: [
+                isArabic ? 'المنتج' : 'Item',
+                isArabic ? 'الكمية' : 'Qty',
+                isArabic ? 'الوحدة' : 'Unit',
+                isArabic ? 'السعر' : 'Unit price',
+                isArabic ? 'الإجمالي' : 'Total',
+              ],
+              data: request.items.map((i) => [
+                isArabic ? i.nameAr : i.nameEn,
+                '${i.qty}',
+                i.unit,
+                (isArabic ? 'ج.م ' : 'EGP ') + i.price.toStringAsFixed(2),
+                (isArabic ? 'ج.م ' : 'EGP ') + (i.price * i.qty).toStringAsFixed(2),
+              ]).toList(),
+              border: pw.TableBorder.all(color: PdfColors.grey400, width: .5),
+              headerStyle: pw.TextStyle(font: boldFont, fontSize: 11, color: PdfColors.white),
+              cellStyle: pw.TextStyle(font: baseFont, fontSize: 10),
+              headerDecoration: pw.BoxDecoration(color: navy),
+              rowDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
+              oddRowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+              cellAlignments: {
+                for (var i in List.generate(5, (i) => i)) i: isArabic ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+              },
+              headerAlignments: {
+                for (var i in List.generate(5, (i) => i)) i: isArabic ? pw.Alignment.centerRight : pw.Alignment.centerLeft,
+              },
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+              headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              columnWidths: {
+                0: pw.FlexColumnWidth(4),
+                1: pw.FlexColumnWidth(1.2),
+                2: pw.FlexColumnWidth(1.5),
+                3: pw.FlexColumnWidth(2),
+                4: pw.FlexColumnWidth(2),
+              },
+              headerDirection: isArabic ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+              tableDirection: isArabic ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+            ),
+            pw.SizedBox(height: 16),
+            pw.Align(
+              alignment: pw.Alignment.centerLeft,
+              child: pw.Container(
+                width: 260,
+                child: pw.Column(
+                  children: [
+                    _totalRow(isArabic ? 'الإجمالي الفرعي' : 'Subtotal', subtotal, isArabic, baseFont, boldFont, navy),
+                    if (request.vat) _totalRow(isArabic ? 'ضريبة 14%' : 'VAT 14%', vat, isArabic, baseFont, boldFont, navy),
+                    pw.SizedBox(height: 6),
+                    pw.Container(
+                      height: 1.2,
+                      color: navy,
+                    ),
+                    pw.SizedBox(height: 6),
+                    pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(isArabic ? 'الإجمالي' : 'TOTAL', style: pw.TextStyle(font: boldFont, fontSize: 15, color: navy)),
+                        pw.Text(
+                          '${isArabic ? 'ج.م ' : 'EGP '}${total.toStringAsFixed(2)}',
+                          style: pw.TextStyle(font: boldFont, fontSize: 15, color: navy),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (request.notes.isNotEmpty) ...[
+              pw.SizedBox(height: 18),
+              pw.Text(isArabic ? 'ملاحظات' : 'Notes', style: pw.TextStyle(font: boldFont, fontSize: 12, color: navy)),
+              pw.SizedBox(height: 4),
+              pw.Text(request.notes, style: pw.TextStyle(font: baseFont, fontSize: 10, color: PdfColors.blueGrey800)),
+            ],
+            pw.Spacer(),
+            pw.Center(
+              child: pw.Text(
+                isArabic ? 'شكراً لتعاملكم مع GOSST' : 'Thank you for choosing GOSST',
+                style: pw.TextStyle(font: baseFont, fontSize: 10, color: PdfColors.blueGrey500),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final bytes = await doc.save();
+    final safeCode = request.orderLabel.replaceAll(RegExp(r'[^A-Za-z0-9]'), '_');
+    final fileName = 'GOSST_$safeCode.pdf';
+    final file = await _writeToTemp(Uint8List.fromList(bytes), fileName);
+    await _share(file, fileName);
+  }
+
+  static pw.Widget _info(String label, String value, pw.Font font) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 3),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text('$label: ', style: pw.TextStyle(font: font, fontSize: 11, fontWeight: pw.FontWeight.bold)),
+          pw.Expanded(
+            child: pw.Text(value.isEmpty ? '—' : value, style: pw.TextStyle(font: font, fontSize: 11)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _totalRow(String label, double amount, bool isArabic, pw.Font base, pw.Font bold, PdfColor navy) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: pw.TextStyle(font: base, fontSize: 12, color: PdfColors.blueGrey800)),
+          pw.Text(
+            '${isArabic ? 'ج.م ' : 'EGP '}${amount.toStringAsFixed(2)}',
+            style: pw.TextStyle(font: bold, fontSize: 12, color: PdfColors.blueGrey900),
+          ),
+        ],
+      ),
+    );
+  }
+
+// -------------------------------------------------------------------------
   //  Excel
   // -------------------------------------------------------------------------
   static Future<void> exportExcel({

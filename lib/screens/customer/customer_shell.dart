@@ -9,6 +9,7 @@ import 'about_screen.dart';
 import 'logistics_screen.dart';
 import 'supplies_screen.dart';
 import 'catalog_screen.dart';
+import 'quote_screen.dart';
 import 'contact_screen.dart';
 import 'settings_screen.dart';
 import 'notifications_screen.dart';
@@ -33,6 +34,7 @@ class _CustomerShellState extends State<CustomerShell> {
     const LogisticsScreen(),
     const SuppliesScreen(),
     CatalogScreen(cartSignal: _cartSignal),
+    const QuoteScreen(),
     const ContactScreen(),
   ];
 
@@ -44,12 +46,12 @@ class _CustomerShellState extends State<CustomerShell> {
 
   static const _labels = {
     0: 'GOSST HOME', 1: 'ABOUT', 2: 'LOGISTICS',
-    3: 'SUPPLIES', 4: 'SUPPLY REQUEST', 5: 'CONTACT',
+    3: 'SUPPLIES', 4: 'SUPPLY REQUEST', 5: 'PRICE QUOTE', 6: 'CONTACT',
   };
 
   static const _labelsAr = {
     0: 'الرئيسية', 1: 'من نحن', 2: 'الخدمات اللوجستية',
-    3: 'التوريدات والتجارة', 4: 'طلب توريد', 5: 'تواصل معنا',
+    3: 'التوريدات والتجارة', 4: 'طلب توريد', 5: 'عرض سعر', 6: 'تواصل معنا',
   };
 
   @override
@@ -171,7 +173,8 @@ class _CustomerShellState extends State<CustomerShell> {
               _drawerItem(en ? 'Logistics Services' : 'الخدمات اللوجستية', Icons.local_shipping, 2),
               _drawerItem(en ? 'Supplies & Trade' : 'التوريدات والتجارة', Icons.inventory, 3),
               _drawerItem(en ? 'Supply Request' : 'طلب توريد', Icons.storefront, 4),
-              _drawerItem(en ? 'Contact' : 'تواصل معنا', Icons.mail, 5),
+              _drawerItem(en ? 'Price Quote' : 'عرض سعر', Icons.request_quote, 5),
+              _drawerItem(en ? 'Contact' : 'تواصل معنا', Icons.mail, 6),
               const Divider(color: Colors.white24),
               ListTile(
                 leading: const Icon(Icons.receipt_long, color: Colors.white),

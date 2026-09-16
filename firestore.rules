@@ -33,12 +33,14 @@ service cloud.firestore {
     // provisioning zero (a bare delegate). Everything else comes from a super.
     match /products/{id} {
       allow read: if true;
-      allow create, update, delete: if hasPerm('products');
+      // Catalogue management lives inside the Price quotes (Quotes) panel, so
+      // the same permission that opens the panel also guards its writes.
+      allow create, update, delete: if hasPerm('quotes');
     }
 
     match /categories/{id} {
       allow read: if true;
-      allow create, update, delete: if hasPerm('categories');
+      allow create, update, delete: if hasPerm('quotes');
     }
 
     match /notifications/{id} {
@@ -117,6 +119,20 @@ service cloud.firestore {
 
     match /customer_tokens/{cid} {
       allow read, write: if signedIn() && cid == request.auth.uid;
+    }
+
+    // Sequential counters used to generate operation codes (GOSSTS01,
+    // GOSSTT001, GOSSTP0001). Any signed-in user may bump the counter so both
+    // customers (quotes/supply) and admins (purchases) can create documents.
+    // Only a single numeric `value` field is writable; value is never deleted.
+    match /counters/{key} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() &&
+        request.resource.data is map &&
+        request.resource.data.keys().hasOnly(['value']) &&
+        request.resource.data.value is int &&
+        request.resource.data.value >= 0;
+      allow delete: if false;
     }
 
     match /admin_tokens/{uid} {

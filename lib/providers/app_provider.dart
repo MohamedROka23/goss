@@ -63,21 +63,7 @@ class AppProvider extends ChangeNotifier {
   }
 
   List<ProductCategory> _categories = [];
-  List<ProductCategory> get productCategories =>
-      _categories.isEmpty ? _fallbackCategories : _categories;
-
-  static final List<ProductCategory> builtinFallbackCategories = const [
-    ProductCategory(id: 'vegetables', en: 'Fresh Vegetables', ar: '\u0627\u0644\u062e\u0636\u0631\u0648\u0627\u062a \u0627\u0644\u0637\u0627\u0632\u062c\u0629'),
-    ProductCategory(id: 'fruits', en: 'Fresh Fruits', ar: '\u0627\u0644\u0641\u0627\u0643\u0647\u0629 \u0627\u0644\u0637\u0627\u0632\u062c\u0629'),
-    ProductCategory(id: 'general', en: 'General Goods', ar: '\u0639\u0627\u0645'),
-    ProductCategory(id: 'office', en: 'Office Supplies', ar: '\u0627\u0644\u0623\u062f\u0648\u0627\u062a \u0627\u0644\u0645\u0643\u062a\u0628\u064a\u0629'),
-    ProductCategory(id: 'hotel', en: 'Hotel Supplies', ar: '\u0623\u062f\u0648\u0627\u062a \u0641\u0646\u062f\u0642\u064a\u0629'),
-    ProductCategory(id: 'restaurant', en: 'Restaurant Supplies', ar: '\u0644\u0648\u0627\u0632\u0645 \u0627\u0644\u0645\u0637\u0627\u0639\u0645'),
-    ProductCategory(id: 'appliances', en: 'Appliances', ar: '\u0623\u062c\u0647\u0632\u0629'),
-    ProductCategory(id: 'packaging', en: 'Packaging & Wrapping Materials', ar: '\u0645\u0648\u0627\u062f \u0627\u0644\u062a\u0639\u0628\u0626\u0629 \u0648\u0627\u0644\u062a\u063a\u0644\u064a\u0641'),
-  ];
-
-  List<ProductCategory> get _fallbackCategories => builtinFallbackCategories;
+  List<ProductCategory> get productCategories => _categories;
 
   List<CartItem> _cart = [];
   List<CartItem> get cart => _cart;
@@ -410,10 +396,8 @@ class AppProvider extends ChangeNotifier {
     try {
       final backend = await BackendManager.resolve();
       final list = await backend.fetchCategories();
-      if (list.isNotEmpty) {
-        _categories = list;
-        notifyListeners();
-      }
+      _categories = list;
+      notifyListeners();
     } catch (_) {}
   }
 
@@ -962,6 +946,7 @@ class AppProvider extends ChangeNotifier {
     String origin = '',
     String destination = '',
     String type = 'supply',
+    bool vat = false,
   }) async {
     _loading = true;
     _error = null;
@@ -988,6 +973,7 @@ class AppProvider extends ChangeNotifier {
         'origin': origin,
         'destination': destination,
         'type': type,
+        'vat': vat,
       });
       clearCart();
       _loading = false;

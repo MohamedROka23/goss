@@ -6,47 +6,42 @@ import '../../models/models.dart';
 import '../../widgets/widgets.dart';
 import 'my_orders_screen.dart';
 
-class CatalogScreen extends StatefulWidget {
-  final String? initialCategory;
-  final ValueNotifier<int>? cartSignal;
-  final bool showBack;
-  const CatalogScreen({super.key, this.initialCategory, this.cartSignal, this.showBack = false});
+class QuoteScreen extends StatefulWidget {
+  const QuoteScreen({super.key});
 
   @override
-  State<CatalogScreen> createState() => _CatalogScreenState();
+  State<QuoteScreen> createState() => _QuoteScreenState();
 }
 
-class _CatalogScreenState extends State<CatalogScreen> {
+class _QuoteScreenState extends State<QuoteScreen> {
   String _search = '';
-  late String _category;
+  String _category = 'all';
   bool _showCart = false;
+  bool _vat = false;
   bool _sent = false;
   bool _submitting = false;
   String? _error;
+
+  final List<CartItem> _lines = [];
+  final Map<String, TextEditingController> _qtyCtrls = {};
 
   final _companyCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
-  final _originCtrl = TextEditingController();
-  final _destinationCtrl = TextEditingController();
-  final Map<String, TextEditingController> _qtyCtrls = {};
 
   @override
-  void initState() {
-    super.initState();
-    _category = widget.initialCategory ?? 'all';
-    widget.cartSignal?.addListener(_onCartSignal);
-  }
-
-  void _onCartSignal() {
-    if (!mounted) return;
-    setState(() {
-      _showCart = true;
-      _error = null;
-      _sent = false;
-    });
+  void dispose() {
+    _companyCtrl.dispose();
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
+    _notesCtrl.dispose();
+    for (final c in _qtyCtrls.values) {
+      c.dispose();
+    }
+    super.dispose();
   }
 
   void _resetForm() {
@@ -55,24 +50,32 @@ class _CatalogScreenState extends State<CatalogScreen> {
     _phoneCtrl.clear();
     _emailCtrl.clear();
     _notesCtrl.clear();
-    _originCtrl.clear();
-    _destinationCtrl.clear();
+    _vat = false;
   }
 
-  @override
-  void dispose() {
-    widget.cartSignal?.removeListener(_onCartSignal);
-    _companyCtrl.dispose();
-    _nameCtrl.dispose();
-    _phoneCtrl.dispose();
-    _emailCtrl.dispose();
-    _notesCtrl.dispose();
-    _originCtrl.dispose();
-    _destinationCtrl.dispose();
-    for (final c in _qtyCtrls.values) {
-      c.dispose();
+  void _add(String productId) {
+    final existing = _lines.where((c) => c.productId == productId);
+    if (existing.isNotEmpty) {
+      setState(() {
+        existing.first.qty = (existing.first.qty + 1).clamp(1, 9999);
+        _error = null;
+        _sent = false;
+      });
+    } else {
+      setState(() {
+        _lines.add(CartItem(productId: productId, qty: 1));
+        _error = null;
+        _sent = false;
+      });
     }
-    super.dispose();
+    _showCart = true;
+  }
+
+  void _remove(String productId) {
+    setState(() {
+      _lines.removeWhere((c) => c.productId == productId);
+      _qtyCtrls.remove(productId)?.dispose();
+    });
   }
 
   TextEditingController _qtyController(String productId, int qty) {
@@ -80,6 +83,20 @@ class _CatalogScreenState extends State<CatalogScreen> {
     if (c.text != '$qty') c.text = '$qty';
     return c;
   }
+
+  double get _subtotal {
+    final app = context.read<AppProvider>();
+    double total = 0;
+    for (final item in _lines) {
+      final p = app.products.firstWhere((e) => e.id == item.productId, orElse: () => Product.fromJson(const {}));
+      total += p.price * item.qty;
+    }
+    return total;
+  }
+
+  double get _vatAmount => _vat ? _subtotal * 0.14 : 0;
+
+  double get _total => _subtotal + _vatAmount;
 
   @override
   Widget build(BuildContext context) {
@@ -93,51 +110,23 @@ class _CatalogScreenState extends State<CatalogScreen> {
       return matchCat && (q.isEmpty || hay.contains(q));
     }).toList();
 
-    final body = Column(
+    return Column(
       children: [
-        Stack(
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [GossColors.navy, GossColors.navy2],
-                ),
-              ),
-              child: Text(
-                en ? 'Supply Request & Product Search' : '\u0637\u0644\u0628 \u062a\u0648\u0631\u064a\u062f \u0648\u0627\u0644\u0628\u062d\u062b \u0639\u0646 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800, height: 1.5),
-              ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [GossColors.navy, GossColors.navy2],
             ),
-            if (widget.showBack)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  child: Align(
-                    alignment: AlignmentDirectional.centerStart,
-                    child: IconButton(
-                      tooltip: en ? 'Back' : '\u0631\u062c\u0648\u0639',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black26,
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: Icon(
-                        Directionality.of(context) == TextDirection.rtl
-                            ? Icons.arrow_forward
-                            : Icons.arrow_back,
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ),
-                ),
-              ),
-          ],
+          ),
+          child: Text(
+            en ? 'Price Quote & Product Search' : 'عرض سعر والبحث عن المنتجات',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800, height: 1.5),
+          ),
         ),
         Expanded(
           child: RefreshIndicator(
@@ -153,7 +142,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     _cartPanel(context, app, en),
                     const SizedBox(height: 16),
                   ],
-                  _productGrid(filtered, app, en),
+                  _productGrid(filtered, en),
                 ],
               ),
             ),
@@ -161,14 +150,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
         ),
       ],
     );
-
-    if (widget.showBack) {
-      return Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: body,
-      );
-    }
-    return body;
   }
 
   Widget _filterBar(BuildContext context, bool en) {
@@ -177,7 +158,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
       children: [
         TextField(
           decoration: InputDecoration(
-            hintText: en ? 'Search a product...' : '\u0627\u0628\u062d\u062b \u0639\u0646 \u0645\u0646\u062a\u062c...',
+            hintText: en ? 'Search a product...' : 'ابحث عن منتج...',
             prefixIcon: const Icon(Icons.search),
             isDense: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -193,7 +174,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 isExpanded: true,
                 underline: Container(height: 1, color: GossColors.navy.withValues(alpha: 0.3)),
                 items: [
-                  DropdownMenuItem(value: 'all', child: Text(en ? 'All categories' : '\u0643\u0644 \u0627\u0644\u0623\u0642\u0633\u0627\u0645', overflow: TextOverflow.ellipsis)),
+                  DropdownMenuItem(value: 'all', child: Text(en ? 'All categories' : 'كل الأقسام', overflow: TextOverflow.ellipsis)),
                   ...context.watch<AppProvider>().productCategories.map((c) => DropdownMenuItem(
                     value: c.id,
                     child: Text(en ? c.en : c.ar, overflow: TextOverflow.ellipsis),
@@ -204,11 +185,11 @@ class _CatalogScreenState extends State<CatalogScreen> {
             ),
             const SizedBox(width: 8),
             IconButton(
-              tooltip: en ? 'Your request' : '\u0637\u0644\u0628\u0643',
+              tooltip: en ? 'Your quote' : 'عرضك',
               icon: Badge(
-                isLabelVisible: context.read<AppProvider>().cartCount > 0,
-                label: Text('${context.read<AppProvider>().cartCount}'),
-                child: const Icon(Icons.shopping_cart),
+                isLabelVisible: _lines.isNotEmpty,
+                label: Text('${_lines.length}'),
+                child: const Icon(Icons.request_quote),
               ),
               onPressed: () => setState(() => _showCart = !_showCart),
             ),
@@ -218,16 +199,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
     );
   }
 
-  Widget _productGrid(List<Product> products, AppProvider app, bool en) {
+  Widget _productGrid(List<Product> products, bool en) {
     if (products.isEmpty) {
-      final isCategoryEmpty = _search.trim().isEmpty && _category != 'all';
-      final msg = isCategoryEmpty
-          ? (en ? 'No products in this category yet.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0646\u062a\u062c\u0627\u062a \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u0642\u0633\u0645 \u0628\u0639\u062f.')
-          : (en ? 'No products match your search.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0646\u062a\u062c\u0627\u062a \u0645\u0637\u0627\u0628\u0642\u0629.');
       return Padding(
         padding: const EdgeInsets.all(32),
         child: Text(
-          msg,
+          en ? 'No products match your search.' : 'لا توجد منتجات مطابقة.',
           style: TextStyle(color: context.mutedColor),
         ),
       );
@@ -248,14 +225,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 child: ProductCard(
                   product: p,
                   isArabic: !en,
-                  onAdd: () {
-                    app.addToCart(p.id);
-                    setState(() {
-                      _showCart = true;
-                      _error = null;
-                      _sent = false;
-                    });
-                  },
+                  onAdd: () => _add(p.id),
                 ),
               ),
           ],
@@ -265,8 +235,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 
   Widget _cartPanel(BuildContext context, AppProvider app, bool en) {
-    final lines = app.cartLines;
-    final total = app.cartTotal;
+    final products = _lines.map((item) {
+      final p = app.products.firstWhere((e) => e.id == item.productId, orElse: () => Product.fromJson(const {}));
+      return (item, p);
+    }).toList();
 
     return Card(
       child: Padding(
@@ -275,13 +247,14 @@ class _CatalogScreenState extends State<CatalogScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              en ? 'Customer request' : '\u0637\u0644\u0628 \u0627\u0644\u0639\u0645\u064a\u0644',
+              en ? 'Your price quote' : 'عرض السعر الخاص بك',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: context.headingColor),
             ),
             const SizedBox(height: 4),
             Text(
-              en ? 'Fill your details below and send the request to Gosst admin.'
-                  : '\u0627\u0643\u062a\u0628 \u0628\u064a\u0627\u0646\u0627\u062a\u0643 \u0623\u062f\u0646\u0627\u0647 \u0648\u0623\u0631\u0633\u0644 \u0627\u0644\u0637\u0644\u0628 \u0644\u0625\u062f\u0627\u0631\u0629 \u062c\u0648\u0633\u062a.',
+              en
+                  ? 'Send this quote to Gosst admin for pricing review.'
+                  : 'أرسل هذا العرض لإدارة جوست للمراجعة والتسعير.',
               style: TextStyle(color: context.mutedColor, fontSize: 13),
             ),
             if (!app.online)
@@ -300,30 +273,25 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     Expanded(
                       child: Text(
                         en
-                            ? 'You are offline — requests cannot be sent right now.'
-                            : '\u0623\u0646\u062a \u063a\u064a\u0631 \u0645\u062a\u0635\u0644 \u0628\u0627\u0644\u0625\u0646\u062a\u0631\u0646\u062a \u2014 \u0644\u0627 \u064a\u0645\u0643\u0646 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628\u0627\u062a \u062d\u0627\u0644\u064a\u0627\u064b.',
-                        style: const TextStyle(
-                          color: GossColors.red,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          height: 1.35,
-                        ),
+                            ? 'You are offline — quotes cannot be sent right now.'
+                            : 'أنت غير متصل بالإنترنت — لا يمكن إرسال العروض حالياً.',
+                        style: const TextStyle(color: GossColors.red, fontSize: 12.5, fontWeight: FontWeight.w600, height: 1.35),
                       ),
                     ),
                   ],
                 ),
               ),
-            if (lines.isEmpty)
+            if (_lines.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 child: Text(
-                  en ? 'Add products from the catalog.' : '\u0623\u0636\u0641 \u0645\u0646\u062a\u062c\u0627\u062a \u0645\u0646 \u0627\u0644\u0643\u062a\u0627\u0644\u0648\u062c.',
+                  en ? 'Add products from the catalog.' : 'أضف منتجات من الكتالوج.',
                   style: TextStyle(color: context.mutedColor),
                 ),
               ),
-            ...lines.map((entry) {
-              final item = entry.key;
-              final product = entry.value;
+            ...products.map((entry) {
+              final item = entry.$1;
+              final product = entry.$2;
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Row(
@@ -337,7 +305,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                           ),
                           Text(
-                            '${en ? 'EGP' : '\u062c.\u0645'} ${(product.price * item.qty).toStringAsFixed(2)}',
+                            '${en ? 'EGP' : 'ج.م'} ${(product.price * item.qty).toStringAsFixed(2)}',
                             textDirection: TextDirection.ltr,
                             style: TextStyle(color: context.mutedColor, fontSize: 13),
                           ),
@@ -346,15 +314,13 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      tooltip: en ? 'Decrease quantity' : '\u062a\u0642\u0644\u064a\u0644 \u0627\u0644\u0643\u0645\u064a\u0629',
                       icon: const Icon(Icons.remove_circle_outline, size: 22),
                       onPressed: () {
                         final n = item.qty - 1;
                         if (n < 1) {
-                          _qtyCtrls.remove(item.productId)?.dispose();
-                          app.removeFromCart(item.productId);
+                          _remove(item.productId);
                         } else {
-                          app.setCartQty(item.productId, n);
+                          setState(() => item.qty = n);
                         }
                       },
                     ),
@@ -373,43 +339,62 @@ class _CatalogScreenState extends State<CatalogScreen> {
                         onChanged: (v) {
                           final q = int.tryParse(v);
                           if (q != null && q >= 1) {
-                            app.setCartQty(item.productId, q);
+                            setState(() => item.qty = q.clamp(1, 9999));
                           } else if (q == 0) {
-                            _qtyCtrls.remove(item.productId)?.dispose();
-                            app.removeFromCart(item.productId);
-                          } else if (v.trim().isNotEmpty) {
-                            final c = _qtyCtrls[item.productId];
-                            if (c != null && c.text != '1') c.text = '1';
+                            _remove(item.productId);
                           }
                         },
                       ),
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      tooltip: en ? 'Increase quantity' : '\u0632\u064a\u0627\u062f\u0629 \u0627\u0644\u0643\u0645\u064a\u0629',
                       icon: const Icon(Icons.add_circle_outline, size: 22),
                       onPressed: () {
-                        app.setCartQty(item.productId, (item.qty + 1).clamp(1, 9999));
+                        setState(() => item.qty = (item.qty + 1).clamp(1, 9999));
                       },
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      tooltip: en ? 'Remove from request' : '\u0645\u0633\u062d \u0645\u0646 \u0627\u0644\u0637\u0644\u0628',
                       icon: const Icon(Icons.delete_outline, size: 20, color: GossColors.red),
-                      onPressed: () {
-                        _qtyCtrls.remove(item.productId)?.dispose();
-                        app.removeFromCart(item.productId);
-                      },
+                      onPressed: () => _remove(item.productId),
                     ),
                   ],
                 ),
               );
             }),
             const Divider(),
-            Text(
-              '${en ? "Estimated total" : "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u062a\u0642\u062f\u064a\u0631\u064a"}: ${en ? 'EGP' : '\u062c.\u0645'} ${total.toStringAsFixed(2)}',
-              textDirection: TextDirection.ltr,
-              style: TextStyle(fontWeight: FontWeight.w700, color: context.headingColor),
+            CheckboxListTile(
+              value: _vat,
+              onChanged: _lines.isEmpty
+                  ? null
+                  : (v) => setState(() => _vat = v ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              title: Text(en ? 'Add 14% VAT' : 'إضافة ضريبة 14%'),
+              subtitle: Text(
+                en ? 'VAT amount added to your total.' : 'تُضاف قيمة الضريبة إلى إجمالي عرض السعر.',
+                style: TextStyle(color: context.mutedColor, fontSize: 12),
+              ),
+            ),
+            if (_vat)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'VAT 14%: ${en ? 'EGP' : 'ج.م'} ${_vatAmount.toStringAsFixed(2)}',
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(fontWeight: FontWeight.w600, color: context.mutedColor),
+                ),
+              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${en ? "Total" : "الإجمالي"}: ${en ? 'EGP' : 'ج.م'} ${_total.toStringAsFixed(2)}',
+                    textDirection: TextDirection.ltr,
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: context.headingColor),
+                  ),
+                ),
+              ],
             ),
             if (_sent)
               Container(
@@ -423,24 +408,21 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      en ? 'Price quote request sent. Gosst admin will review it.' : '\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0637\u0644\u0628 \u0639\u0631\u0636 \u0633\u0639\u0631. \u0633\u064a\u0631\u0627\u062c\u0639\u0647 \u0627\u0644\u0622\u0646 \u0644\u062f\u0649 \u0627\u0644\u0625\u062f\u0627\u0631\u0629.',
+                      en
+                          ? 'Price quote sent. Gosst admin will review it.'
+                          : 'تم إرسال عرض السعر. سيراجعه مدير جوست.',
                       style: const TextStyle(color: GossColors.green, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
                     TextButton.icon(
-                      style: TextButton.styleFrom(
-                        foregroundColor: GossColors.green,
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 36),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
+                      style: TextButton.styleFrom(foregroundColor: GossColors.green, padding: EdgeInsets.zero),
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(builder: (_) => const MyOrdersScreen()),
                         );
                       },
                       icon: const Icon(Icons.receipt_long, size: 18),
-                      label: Text(en ? 'Track it in My Orders' : '\u062a\u0627\u0628\u0639\u0647 \u0641\u064a \u0637\u0644\u0628\u0627\u062a\u064a', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      label: Text(en ? 'Track it in My Orders' : 'تابعه في طلباتي', style: const TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ],
                 ),
@@ -458,7 +440,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   style: const TextStyle(color: GossColors.red, fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ),
-            if (!_sent && lines.isNotEmpty) ...[
+            if (!_sent && _lines.isNotEmpty) ...[
               const SizedBox(height: 12),
               _requestForm(en),
             ],
@@ -473,71 +455,47 @@ class _CatalogScreenState extends State<CatalogScreen> {
       children: [
         TextField(
           controller: _companyCtrl,
-          decoration: InputDecoration(hintText: en ? 'Company' : '\u0627\u0644\u0634\u0631\u0643\u0629'),
+          decoration: InputDecoration(hintText: en ? 'Company' : 'الشركة'),
         ),
         const SizedBox(height: 8),
         TextField(
           controller: _nameCtrl,
-          decoration: InputDecoration(hintText: en ? 'Contact name' : '\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u0624\u0648\u0644'),
+          decoration: InputDecoration(hintText: en ? 'Contact name' : 'اسم المسؤول'),
         ),
         const SizedBox(height: 8),
         TextField(
           controller: _phoneCtrl,
           keyboardType: TextInputType.phone,
-          decoration: InputDecoration(hintText: en ? 'Phone' : '\u0627\u0644\u0647\u0627\u062a\u0641'),
+          decoration: InputDecoration(hintText: en ? 'Phone' : 'الهاتف'),
         ),
         const SizedBox(height: 8),
         TextField(
           controller: _emailCtrl,
           keyboardType: TextInputType.emailAddress,
-          decoration: InputDecoration(hintText: en ? 'Email' : '\u0627\u0644\u0628\u0631\u064a\u062f \u0627\u0644\u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a'),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _originCtrl,
-                decoration: InputDecoration(
-                  hintText: en ? 'Origin (optional)' : '\u0627\u0644\u0627\u0646\u0637\u0644\u0627\u0642 (اختياري)',
-                  prefixIcon: const Icon(Icons.trip_origin, size: 20),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: _destinationCtrl,
-                decoration: InputDecoration(
-                  hintText: en ? 'Destination (optional)' : '\u0627\u0644\u0648\u062c\u0647\u0629 (اختياري)',
-                  prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
-                ),
-              ),
-            ),
-          ],
+          decoration: InputDecoration(hintText: en ? 'Email' : 'البريد الإلكتروني'),
         ),
         const SizedBox(height: 8),
         TextField(
           controller: _notesCtrl,
           maxLines: 3,
-          decoration: InputDecoration(hintText: en ? 'Notes' : '\u0645\u0644\u0627\u062d\u0638\u0627\u062a'),
+          decoration: InputDecoration(hintText: en ? 'Notes' : 'ملاحظات'),
         ),
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           child: GossButton(
-            label: en ? 'Request price quote' : '\u0637\u0644\u0628 \u0639\u0631\u0636 \u0633\u0639\u0631',
+            label: en ? 'Send price quote' : 'إرسال عرض سعر',
             color: GossColors.red,
             onPressed: _submitting
                 ? null
                 : () async {
               setState(() => _error = null);
               if (_nameCtrl.text.trim().isEmpty) {
-                setState(() => _error = en ? 'Please enter your name.' : '\u0645\u0646 \u0641\u0636\u0644\u0643 \u0623\u062f\u062e\u0644 \u0627\u0633\u0645\u0643.');
+                setState(() => _error = en ? 'Please enter your name.' : 'من فضلك أدخل اسمك.');
                 return;
               }
               if (_phoneCtrl.text.trim().isEmpty) {
-                setState(() => _error = en ? 'Please enter your phone number.' : '\u0645\u0646 \u0641\u0636\u0644\u0643 \u0623\u062f\u062e\u0644 \u0631\u0642\u0645 \u0627\u0644\u0647\u0627\u062a\u0641.');
+                setState(() => _error = en ? 'Please enter your phone number.' : 'من فضلك أدخل رقم الهاتف.');
                 return;
               }
               final email = _emailCtrl.text.trim();
@@ -545,54 +503,47 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
                 setState(() => _error = en
                     ? 'Please enter a valid email address.'
-                    : '\u0645\u0646 \u0641\u0636\u0644\u0643 \u0623\u062f\u062e\u0644 \u0628\u0631\u064a\u062f \u0625\u0644\u0643\u062a\u0631\u0648\u0646\u064a \u0635\u0627\u0644\u062d.');
+                    : 'من فضلك أدخل بريد إلكتروني صالح.');
                 return;
               }
               final confirmed = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  title: Text(en ? 'Request price quote' : '\u0637\u0644\u0628 \u0639\u0631\u0636 \u0633\u0639\u0631'),
+                  title: Text(en ? 'Send price quote' : 'إرسال عرض سعر'),
                   content: Text(en
-                      ? 'Send this price quote request to Gosst admin? This does not affect accounting — it is for pricing review only.'
-                      : '\u0647\u0644 \u062a\u0631\u064a\u062f \u0625\u0631\u0633\u0627\u0644 \u0637\u0644\u0628 \u0639\u0631\u0636 \u0633\u0639\u0631 \u0644\u0625\u062f\u0627\u0631\u0629 \u062c\u0648\u0633\u062a\u061f \u0644\u0627 \u064a\u062f\u062e\u0644 \u0641\u064a \u0627\u0644\u062d\u0633\u0627\u0628\u0627\u062a \u2014 \u0645\u0631\u062c\u0639 \u0644\u0644\u0627\u0637\u0644\u0627\u0639 \u0639\u0644\u0649 \u0627\u0644\u062a\u0633\u0639\u064a\u0631 \u0641\u0642\u0637.'),
+                      ? 'Send this price quote to Gosst admin? This does not affect accounting — it is for pricing review only.'
+                      : 'هل تريد إرسال عرض السعر إلى إدارة جوست؟ لا يدخل في الحسابات — للمراجعة على التسعير فقط.'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(ctx).pop(false),
-                      child: Text(en ? 'Cancel' : '\u0625\u0644\u063a\u0627\u0621'),
+                      child: Text(en ? 'Cancel' : 'إلغاء'),
                     ),
                     TextButton(
                       style: TextButton.styleFrom(foregroundColor: GossColors.red),
                       onPressed: () => Navigator.of(ctx).pop(true),
-                      child: Text(en ? 'Send' : '\u0625\u0631\u0633\u0627\u0644'),
+                      child: Text(en ? 'Send' : 'إرسال'),
                     ),
                   ],
                 ),
               );
               if (confirmed != true || !mounted) return;
-              final app2 = context.read<AppProvider>();
-              if (app2.cartLines.isEmpty) {
-                if (mounted) {
-                  setState(() => _error = en
-                      ? 'Your cart is empty. Add products first.'
-                      : '\u0633\u0644\u062a\u0643 \u0641\u0627\u0631\u063a\u0629. \u0623\u0636\u0641 \u0645\u0646\u062a\u062c\u0627\u062a \u0623\u0648\u0644\u0627\u064b.');
-                }
-                return;
-              }
-              if (_submitting) return;
-              setState(() => _submitting = true);
+              final app = context.read<AppProvider>();
               try {
-                final app = context.read<AppProvider>();
                 await app.sendRequest(
                   company: _companyCtrl.text,
                   name: _nameCtrl.text,
                   phone: _phoneCtrl.text,
                   email: _emailCtrl.text,
                   notes: _notesCtrl.text,
-                  origin: _originCtrl.text,
-                  destination: _destinationCtrl.text,
-                  type: 'supply',
+                  type: 'quote',
+                  vat: _vat,
                 );
                 if (!mounted) return;
+                _lines.clear();
+                for (final c in _qtyCtrls.values) {
+                  c.dispose();
+                }
+                _qtyCtrls.clear();
                 _resetForm();
                 setState(() {
                   _sent = true;
@@ -603,8 +554,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 setState(() {
                   _submitting = false;
                   _error = en
-                      ? 'Failed to send the request. Check your connection and try again.'
-                      : '\u0641\u0634\u0644 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628. \u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u0627\u062a\u0635\u0627\u0644 \u0648\u062d\u0627\u0648\u0644 \u0645\u0631\u0629 \u0623\u062e\u0631\u0649.';
+                      ? 'Failed to send the quote. Check your connection and try again.'
+                      : 'فشل إرسال العرض. تحقق من الاتصال وحاول مرة أخرى.';
                 });
               }
             },

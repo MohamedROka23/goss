@@ -137,17 +137,41 @@ class ExportButtons extends StatelessWidget {
           icon: Icons.picture_as_pdf_outlined,
           label: 'PDF',
           color: GossColors.red,
-          onTap: () => ExportService.exportPdf(title: title, headers: headers, rows: rows, isArabic: isArabic),
+          onTap: () => _run(context,
+              isArabic: isArabic,
+              job: () => ExportService.exportPdf(
+                  title: title, headers: headers, rows: rows, isArabic: isArabic),
+              msg: 'PDF'),
         ),
         const SizedBox(width: 8),
         _pill(
           icon: Icons.table_chart_outlined,
           label: 'Excel',
           color: const Color(0xFF1A7A3C),
-          onTap: () => ExportService.exportExcel(sheetName: title, headers: headers, rows: rows, isArabic: isArabic),
+          onTap: () => _run(context,
+              isArabic: isArabic,
+              job: () => ExportService.exportExcel(
+                  sheetName: title, headers: headers, rows: rows, isArabic: isArabic),
+              msg: 'Excel'),
         ),
       ],
     );
+  }
+
+  Future<void> _run(BuildContext context,
+      {required bool isArabic, required Future<void> Function() job, required String msg}) async {
+    try {
+      await job();
+    } catch (e) {
+      if (!context.mounted) return;
+      final short = (e.toString().trim());
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(isArabic
+            ? 'تعذر إنشاء ملف $msg. $short'
+            : 'Failed to create the $msg file. $short'),
+        backgroundColor: GossColors.red,
+      ));
+    }
   }
 
   Widget _pill({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
