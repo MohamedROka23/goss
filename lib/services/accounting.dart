@@ -50,7 +50,7 @@ JournalAccount? accountByCode(String code) {
 }
 
 /// A request only counts as a sale once it is not rejected/cancelled.
-bool isSaleRequest(CustomerRequest r) => r.status != RequestStatus.rejected;
+bool isSaleRequest(CustomerRequest r) => r.type == 'supply' && r.status != RequestStatus.rejected;
 
 /// Invoice value of an order = sum of its line totals.
 double invoiceAmount(CustomerRequest r) {

@@ -115,7 +115,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 32),
                           child: Text(
-                            en ? 'No orders yet. Send a price quote request from the Quotes tab and follow it here.' : 'لا توجد طلبات بعد. أرسل طلب عرض سعر من قسم عروض الأسعار وتابعه هنا.',
+                            en ? 'No orders yet. Send a supply request from the Supply Request tab and follow it here.' : 'لا توجد طلبات بعد. أرسل طلب توريد من قسم طلب التوريد وتابعه هنا.',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: context.mutedColor),
                           ),
@@ -139,6 +139,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
 
   Widget _orderCard(AppProvider app, bool en, CustomerRequest r) {
     final step = _stageStep(r.status);
+    final isQuote = r.type == 'quote';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
@@ -168,14 +169,112 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                     ],
                   ),
                 ),
-                RequestStatusChip(status: r.status, isArabic: !en),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: isQuote ? GossColors.blue.withValues(alpha: 0.12) : GossColors.green.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isQuote ? (en ? 'Quote' : 'عرض سعر') : (en ? 'Supply' : 'طلب توريد'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: isQuote ? GossColors.blue : GossColors.green,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    RequestStatusChip(status: r.status, isArabic: !en),
+                  ],
+                ),
               ],
             ),
-            const Divider(height: 20),
-            Text(
-              en ? 'Order journey' : '\u062e\u0637 \u0633\u064a\u0631 \u0627\u0644\u0637\u0644\u0628',
-              style: TextStyle(fontWeight: FontWeight.w700, color: context.headingColor, fontSize: 13),
-            ),
+if (isQuote) ...[
+              const Divider(height: 20),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: GossColors.blue.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline, size: 18, color: GossColors.blue),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        en
+                            ? 'This is a price quote request - for pricing review only. It does not enter the accounting pipeline.'
+                            : 'هذا طلب عرض سعر - للاطلاع على التسعير فقط. لا يدخل في النظام الحسابي.',
+                        style: TextStyle(fontSize: 12.5, color: context.bodyColor, height: 1.35),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: GossButton(
+                  label: en ? 'Convert to Supply Request' : 'تحويل إلى طلب توريد',
+                  color: GossColors.red,
+                  icon: Icons.swap_horiz,
+                  onPressed: _acting
+                      ? null
+                      : () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: Text(en ? 'Convert to supply request' : 'تحويل إلى طلب توريد'),
+                        content: Text(en
+                            ? 'Create a supply request with the same products from this quote?'
+                            : 'إنشاء طلب توريد بنفس المنتجات الموجودة في هذا العرض؟'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: Text(en ? 'Cancel' : 'إلغاء'),
+                          ),
+                          FilledButton(
+                            style: FilledButton.styleFrom(backgroundColor: GossColors.red),
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: Text(en ? 'Convert' : 'تحويل'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true || !mounted) return;
+                    setState(() => _acting = true);
+                    try {
+                      await app.convertQuoteToSupply(r);
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(en ? 'Supply request created successfully.' : 'تم إنشاء طلب التوريد بنجاح.'),
+                        backgroundColor: GossColors.green,
+                      ));
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(en ? 'Failed to convert. Try again.' : 'فشل التحويل. اجرِ محاولة أخرى.'),
+                        backgroundColor: GossColors.red,
+                      ));
+                    } finally {
+                      if (mounted) setState(() => _acting = false);
+                    }
+                  },
+                ),
+              ),
+            ],
+            if (!isQuote) ...[
+              const Divider(height: 20),
+              Text(
+                en ? 'Order journey' : 'خط سير الطلب',
+                style: TextStyle(fontWeight: FontWeight.w700, color: context.headingColor, fontSize: 13),
+              ),
             const SizedBox(height: 12),
             RequestStatusTimeline(step: step),
             const SizedBox(height: 8),
@@ -268,6 +367,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                   ),
                 ],
               ),
+            ],
             ],
             const Divider(height: 20),
             Text(

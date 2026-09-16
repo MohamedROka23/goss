@@ -33,16 +33,16 @@ class HomeScreen extends StatelessWidget {
   Widget _servicesSection(BuildContext context) {
     final en = _en(context);
     final services = [
-      ['Road Freight', 'الشحن البري'],
-      ['Sea Freight', 'الشحن البحري'],
-      ['Customs Clearance', 'التخليص الجمركي'],
-      ['Smart Warehousing & Distribution Centres', 'التخزين الذكي ومراكز التوزيع'],
-      ['Major Projects & Heavy Equipment', 'المشروعات الكبرى والمعدات الثقيلة'],
       ['Fresh Vegetables', 'الخضروات الطازجة'],
       ['Fresh Fruits', 'الفاكهة الطازجة'],
       ['Hotels & Hospitality Supplies', 'مستلزمات الفنادق والضيافة'],
       ['Office Supplies', 'الأدوات المكتبية'],
       ['Packaging & Wrapping Materials', 'مواد التعبئة والتغليف'],
+      ['Road Freight', 'الشحن البري'],
+      ['Sea Freight', 'الشحن البحري'],
+      ['Customs Clearance', 'التخليص الجمركي'],
+      ['Smart Warehousing & Distribution Centres', 'التخزين الذكي ومراكز التوزيع'],
+      ['Major Projects & Heavy Equipment', 'المشروعات الكبرى والمعدات الثقيلة'],
     ];
 
     return Container(
@@ -72,16 +72,16 @@ class HomeScreen extends StatelessWidget {
                   onTap: () {
                     if (i < 5) {
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => ServiceDetailScreen(index: i)),
-                      );
-                    } else {
-                      Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => CatalogScreen(
-                            initialCategory: supplyIds[i - 5],
+                            initialCategory: supplyIds[i],
                             showBack: true,
                           ),
                         ),
+                      );
+                    } else {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => ServiceDetailScreen(index: i - 5)),
                       );
                     }
                   },

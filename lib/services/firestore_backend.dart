@@ -417,6 +417,7 @@ class FirestoreBackend implements GossBackend {
       'notes': payload['notes'] ?? '',
       'items': payload['items'] ?? [],
       'status': 'new',
+      'type': payload['type'] ?? 'supply',
       'customerId': payload['customerId'] ?? '',
       'origin': payload['origin'] ?? '',
       'destination': payload['destination'] ?? '',

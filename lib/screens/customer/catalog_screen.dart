@@ -108,7 +108,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 ),
               ),
               child: Text(
-                en ? 'Price Quotes & Product Search' : '\u0639\u0631\u0648\u0636 \u0627\u0644\u0623\u0633\u0639\u0627\u0631 \u0648\u0627\u0644\u0628\u062d\u062b \u0639\u0646 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a',
+                en ? 'Supply Request & Product Search' : '\u0637\u0644\u0628 \u062a\u0648\u0631\u064a\u062f \u0648\u0627\u0644\u0628\u062d\u062b \u0639\u0646 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800, height: 1.5),
               ),
@@ -423,7 +423,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      en ? 'Request sent. Gosst admin will see it now.' : '\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628. \u0633\u064a\u0638\u0647\u0631 \u0627\u0644\u0622\u0646 \u0644\u062f\u0649 \u0627\u0644\u0625\u062f\u0627\u0631\u0629.',
+                      en ? 'Price quote request sent. Gosst admin will review it.' : '\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0637\u0644\u0628 \u0639\u0631\u0636 \u0633\u0639\u0631. \u0633\u064a\u0631\u0627\u062c\u0639\u0647 \u0627\u0644\u0622\u0646 \u0644\u062f\u0649 \u0627\u0644\u0625\u062f\u0627\u0631\u0629.',
                       style: const TextStyle(color: GossColors.green, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
@@ -526,7 +526,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
         SizedBox(
           width: double.infinity,
           child: GossButton(
-            label: en ? 'Send request' : '\u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628',
+            label: en ? 'Request price quote' : '\u0637\u0644\u0628 \u0639\u0631\u0636 \u0633\u0639\u0631',
             color: GossColors.red,
             onPressed: _submitting
                 ? null
@@ -551,10 +551,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
               final confirmed = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  title: Text(en ? 'Confirm request' : '\u062a\u0623\u0643\u064a\u062f \u0627\u0644\u0637\u0644\u0628'),
+                  title: Text(en ? 'Request price quote' : '\u0637\u0644\u0628 \u0639\u0631\u0636 \u0633\u0639\u0631'),
                   content: Text(en
-                      ? 'Send this request to Gosst admin?'
-                      : '\u0647\u0644 \u062a\u0631\u064a\u062f \u0625\u0631\u0633\u0627\u0644 \u0647\u0630\u0627 \u0627\u0644\u0637\u0644\u0628 \u0644\u0625\u062f\u0627\u0631\u0629 \u062c\u0648\u0633\u062a\u061f'),
+                      ? 'Send this price quote request to Gosst admin? This does not affect accounting — it is for pricing review only.'
+                      : '\u0647\u0644 \u062a\u0631\u064a\u062f \u0625\u0631\u0633\u0627\u0644 \u0637\u0644\u0628 \u0639\u0631\u0636 \u0633\u0639\u0631 \u0644\u0625\u062f\u0627\u0631\u0629 \u062c\u0648\u0633\u062a\u061f \u0644\u0627 \u064a\u062f\u062e\u0644 \u0641\u064a \u0627\u0644\u062d\u0633\u0627\u0628\u0627\u062a \u2014 \u0645\u0631\u062c\u0639 \u0644\u0644\u0627\u0637\u0644\u0627\u0639 \u0639\u0644\u0649 \u0627\u0644\u062a\u0633\u0639\u064a\u0631 \u0641\u0642\u0637.'),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(ctx).pop(false),
@@ -590,6 +590,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   notes: _notesCtrl.text,
                   origin: _originCtrl.text,
                   destination: _destinationCtrl.text,
+                  type: 'quote',
                 );
                 if (!mounted) return;
                 _resetForm();

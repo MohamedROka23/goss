@@ -948,6 +948,7 @@ class AppProvider extends ChangeNotifier {
     required String notes,
     String origin = '',
     String destination = '',
+    String type = 'supply',
   }) async {
     _loading = true;
     _error = null;
@@ -973,8 +974,48 @@ class AppProvider extends ChangeNotifier {
         'customerId': await BackendManager.customerId(),
         'origin': origin,
         'destination': destination,
+        'type': type,
       });
       clearCart();
+      _loading = false;
+      notifyListeners();
+    } catch (e) {
+      _loading = false;
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Convert a quote request into a supply request using the same items.
+  Future<void> convertQuoteToSupply(CustomerRequest quote) async {
+    _loading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      final items = quote.items.map((i) => {
+        'productId': i.productId,
+        'nameEn': i.nameEn,
+        'nameAr': i.nameAr,
+        'qty': i.qty,
+        'unit': i.unit,
+        'price': i.price,
+      }).toList();
+      final backend = await BackendManager.resolve();
+      await backend.submitRequest({
+        'token': _token ?? '',
+        'company': quote.company,
+        'name': quote.name,
+        'phone': quote.phone,
+        'email': quote.email,
+        'notes': quote.notes,
+        'items': items,
+        'customerId': quote.customerId,
+        'origin': quote.origin,
+        'destination': quote.destination,
+        'type': 'supply',
+      });
+      await loadMyRequests();
       _loading = false;
       notifyListeners();
     } catch (e) {

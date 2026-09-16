@@ -1047,7 +1047,7 @@ app.get("/api/requests", auth, requirePerm("requests"), (_req, res) => {
 });
 
 app.post("/api/requests", (req, res) => {
-  const { company, name, phone, email, notes, items, customerId } = req.body || {};
+  const { company, name, phone, email, notes, items, customerId, origin, destination, type } = req.body || {};
   if (!name || !phone || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "Missing request details" });
   }
@@ -1072,6 +1072,9 @@ app.post("/api/requests", (req, res) => {
     notes: notes || "",
     items,
     customerId: typeof customerId === "string" ? customerId : "",
+    origin: typeof origin === "string" ? origin : "",
+    destination: typeof destination === "string" ? destination : "",
+    type: type === "quote" ? "quote" : "supply",
   };
   db.requests.unshift(request);
   saveDb(db);

@@ -216,6 +216,7 @@ class CustomerRequest {
   final String origin;
   final String destination;
   final List<RequestItem> items;
+  final String type;
 
   CustomerRequest({
     required this.id,
@@ -231,6 +232,7 @@ class CustomerRequest {
     this.origin = '',
     this.destination = '',
     required this.items,
+    this.type = 'supply',
   });
 
   /// Human-readable order reference: sequential #orderNo when available,
@@ -274,6 +276,7 @@ class CustomerRequest {
       items: (json['items'] as List<dynamic>? ?? [])
           .map((e) => RequestItem.fromJson(e))
           .toList(),
+      type: json['type'] ?? 'supply',
     );
   }
 }

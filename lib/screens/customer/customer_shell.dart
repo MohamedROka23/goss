@@ -44,12 +44,12 @@ class _CustomerShellState extends State<CustomerShell> {
 
   static const _labels = {
     0: 'GOSST HOME', 1: 'ABOUT', 2: 'LOGISTICS',
-    3: 'SUPPLIES', 4: 'QUOTES', 5: 'CONTACT',
+    3: 'SUPPLIES', 4: 'SUPPLY REQUEST', 5: 'CONTACT',
   };
 
   static const _labelsAr = {
     0: 'الرئيسية', 1: 'من نحن', 2: 'الخدمات اللوجستية',
-    3: 'التوريدات والتجارة', 4: 'عروض الأسعار', 5: 'تواصل معنا',
+    3: 'التوريدات والتجارة', 4: 'طلب توريد', 5: 'تواصل معنا',
   };
 
   @override
@@ -170,7 +170,7 @@ class _CustomerShellState extends State<CustomerShell> {
               _drawerItem(en ? 'About Us' : '\u0645\u0646 \u0646\u062d\u0646', Icons.info, 1),
               _drawerItem(en ? 'Logistics Services' : 'الخدمات اللوجستية', Icons.local_shipping, 2),
               _drawerItem(en ? 'Supplies & Trade' : 'التوريدات والتجارة', Icons.inventory, 3),
-              _drawerItem(en ? 'Price Quotes' : 'عروض الأسعار', Icons.storefront, 4),
+              _drawerItem(en ? 'Supply Request' : 'طلب توريد', Icons.storefront, 4),
               _drawerItem(en ? 'Contact' : 'تواصل معنا', Icons.mail, 5),
               const Divider(color: Colors.white24),
               ListTile(
