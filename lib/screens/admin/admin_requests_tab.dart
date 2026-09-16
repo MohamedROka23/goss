@@ -26,6 +26,7 @@ class AdminRequestsTab extends StatefulWidget {
 class _AdminRequestsTabState extends State<AdminRequestsTab> {
   DateTime? _filterDate;
   String? _updatingId;
+  bool _showArchive = false;
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -44,10 +45,15 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
     final admin = context.watch<AdminProvider>();
     final en = !app.isArabic;
     final requests = admin.requests;
+    final archivedRequests =
+        requests.where((r) => r.archived || RequestStatus.isFrozen(r.status)).toList();
+    final activeRequests =
+        requests.where((r) => !r.archived && !RequestStatus.isFrozen(r.status)).toList();
+    final base = _showArchive ? archivedRequests : activeRequests;
     final filterStr = _filterDate == null ? null : DateFormat('yyyy-MM-dd').format(_filterDate!);
     final filtered = filterStr == null
-        ? requests
-        : requests.where((r) => _fmtDate(r.createdAt) == filterStr).toList();
+        ? base
+        : base.where((r) => _fmtDate(r.createdAt) == filterStr).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -87,6 +93,23 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
         ),
         if (requests.isNotEmpty) ...[
           const SizedBox(height: 8),
+          SegmentedButton<bool>(
+            segments: [
+              ButtonSegment(
+                value: false,
+                icon: const Icon(Icons.inbox_outlined, size: 16),
+                label: Text(en ? 'Active' : '\u0646\u0634\u0637\u0629'),
+              ),
+              ButtonSegment(
+                value: true,
+                icon: const Icon(Icons.archive_outlined, size: 16),
+                label: Text(en ? 'Archive' : '\u0623\u0631\u0634\u064a\u0641'),
+              ),
+            ],
+            selected: {_showArchive},
+            onSelectionChanged: (s) => setState(() => _showArchive = s.first),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
@@ -115,7 +138,9 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
             child: Text(
               filterStr != null
                   ? (en ? 'No requests on this date.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u062a\u0627\u0631\u064a\u062e.')
-                  : (en ? 'No requests yet.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0628\u0639\u062f.'),
+                  : (_showArchive
+                      ? (en ? 'No archived requests.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0641\u064a \u0627\u0644\u0623\u0631\u0634\u064a\u0641.')
+                      : (en ? 'No requests yet.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0628\u0639\u062f.')),
               style: TextStyle(color: context.mutedColor),
             ),
           ),

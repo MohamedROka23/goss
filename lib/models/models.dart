@@ -218,6 +218,10 @@ class CustomerRequest {
   final List<RequestItem> items;
   final String type;
 
+  /// Archived orders are hidden from the active admin requests list and live
+  /// under the archive view. Archiving never deletes the underlying order.
+  final bool archived;
+
   CustomerRequest({
     required this.id,
     this.orderNo = 0,
@@ -233,6 +237,7 @@ class CustomerRequest {
     this.destination = '',
     required this.items,
     this.type = 'supply',
+    this.archived = false,
   });
 
   /// Human-readable order reference: sequential #orderNo when available,
@@ -277,6 +282,7 @@ class CustomerRequest {
           .map((e) => RequestItem.fromJson(e))
           .toList(),
       type: json['type'] ?? 'supply',
+      archived: json['archived'] ?? false,
     );
   }
 }

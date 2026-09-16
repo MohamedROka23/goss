@@ -184,11 +184,65 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
                         style: const TextStyle(color: GossColors.red, fontSize: 11)),
                 ],
               ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: en ? 'Move to archive' : 'نقل إلى الأرشيف',
+                    icon: const Icon(Icons.archive_outlined, size: 18, color: GossColors.red),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _archiveReceivable(app, admin, en, r),
+                  ),
+                  IconButton(
+                    tooltip: en ? 'Open invoice' : 'فتح الفاتورة',
+                    icon: const Icon(Icons.chevron_right, size: 20),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {},
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _archiveReceivable(AppProvider app, AdminProvider admin, bool en, Receivable r) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(en ? 'Move to archive' : 'نقل إلى الأرشيف'),
+        content: Text(en
+            ? 'Archive ${r.request.orderLabel} for ${r.request.company.isEmpty ? r.request.name : r.request.company}? The order stays available under archive.'
+            : 'أرشفة ${r.request.orderLabel} لـ ${r.request.company.isEmpty ? r.request.name : r.request.company}؟ سيبقى الطلب متاحاً داخل الأرشيف.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(en ? 'Cancel' : 'إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: GossColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(en ? 'Archive' : 'أرشفة'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await admin.archiveRequest(app.token!, r.request.id, archived: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(en ? 'Order moved to archive.' : 'تم نقل الطلب إلى الأرشيف.'),
+          backgroundColor: GossColors.green,
+        ));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(en ? 'Unable to archive the order.' : 'تعذر نقل الطلب إلى الأرشيف.'),
+          backgroundColor: GossColors.red,
+        ));
+      }
+    }
   }
 
   Future<void> _openInvoice(AppProvider app, AdminProvider admin, bool en, Receivable r) async {

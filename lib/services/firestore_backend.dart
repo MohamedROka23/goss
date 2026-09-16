@@ -508,6 +508,18 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
+  Future<void> archiveRequest(
+    String token,
+    String id, {
+    required bool archived,
+  }) async {
+    final ref = _db.collection('requests').doc(id);
+    final snap = await ref.get();
+    if (!snap.exists) throw Exception('Request not found');
+    await ref.update({'archived': archived});
+  }
+
+  @override
   Future<List<Purchase>> fetchPurchases(String token) async {
     final snap = await _db
         .collection('purchases')

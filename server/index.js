@@ -1130,6 +1130,9 @@ app.patch("/api/requests/:id", auth, requirePerm("requests"), async (req, res) =
   }
   const prev = db.requests[i].status;
   db.requests[i].status = req.body.status || prev;
+  if (req.body.archived !== undefined) {
+    db.requests[i].archived = !!req.body.archived;
+  }
   saveDb(db);
   if (db.requests[i].status !== prev) {
     await pushStatusUpdate(db.requests[i], db.requests[i].status);

@@ -82,6 +82,10 @@ abstract class GossBackend {
   Stream<List<CustomerRequest>> watchRequests({String token = ''});
   Future<void> updateRequestStatus(String token, String id, String status);
 
+  /// Archives (or restores) an order: archived orders are hidden from the
+  /// active admin list and live under the archive view.
+  Future<void> archiveRequest(String token, String id, {required bool archived});
+
   /// Customer accepts delivery while the order is 'delivering' -> 'delivered'.
   Future<void> acceptDelivery(String requestId, String customerId);
 

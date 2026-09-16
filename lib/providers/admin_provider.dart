@@ -177,6 +177,42 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> archiveRequest(String token, String id, {required bool archived}) async {
+    final idx = _requests.indexWhere((r) => r.id == id);
+    if (idx >= 0 && _requests[idx].archived != archived) {
+      _requests[idx] = _copyWithArchived(_requests[idx], archived);
+      notifyListeners();
+    }
+    try {
+      final backend = await BackendManager.resolve();
+      await backend.archiveRequest(token, id, archived: archived);
+      _lastError = null;
+    } catch (e) {
+      _setError(e);
+    }
+    await loadRequests(token);
+  }
+
+  CustomerRequest _copyWithArchived(CustomerRequest r, bool archived) {
+    return CustomerRequest(
+      id: r.id,
+      orderNo: r.orderNo,
+      createdAt: r.createdAt,
+      status: r.status,
+      customerId: r.customerId,
+      company: r.company,
+      name: r.name,
+      phone: r.phone,
+      email: r.email,
+      notes: r.notes,
+      origin: r.origin,
+      destination: r.destination,
+      items: r.items,
+      type: r.type,
+      archived: archived,
+    );
+  }
+
   Future<void> loadExpenses(String token) async {
     try {
       final backend = await BackendManager.resolve();

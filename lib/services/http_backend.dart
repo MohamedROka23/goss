@@ -393,6 +393,20 @@ class HttpBackend implements GossBackend {
   }
 
   @override
+  Future<void> archiveRequest(
+    String token,
+    String id, {
+    required bool archived,
+  }) async {
+    final res = await _client.patch(
+      _uri('/api/requests/$id'),
+      headers: _headers(token: token),
+      body: jsonEncode({'archived': archived}),
+    );
+    _check(res);
+  }
+
+  @override
   Future<List<Purchase>> fetchPurchases(String token) async {
     final res = await _client.get(
       _uri('/api/purchases'),
