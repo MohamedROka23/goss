@@ -470,6 +470,7 @@ class _JournalEntryDialogState extends State<_JournalEntryDialog> {
         children: [
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: line.accountCode,
               isDense: true,
               decoration: InputDecoration(isDense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6)),

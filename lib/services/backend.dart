@@ -82,9 +82,16 @@ abstract class GossBackend {
   Stream<List<CustomerRequest>> watchRequests({String token = ''});
   Future<void> updateRequestStatus(String token, String id, String status);
 
+  /// Marks a price-quote as converted so it can never be converted twice.
+  Future<void> markRequestConverted(String token, String id);
+
   /// Archives (or restores) an order: archived orders are hidden from the
   /// active admin list and live under the archive view.
   Future<void> archiveRequest(String token, String id, {required bool archived});
+
+  /// Customer-side archive: marks one of the customer's own orders archived
+  /// (or restores it). Verifies ownership before writing.
+  Future<void> archiveMyRequest(String requestId, String customerId, {required bool archived});
 
   /// Customer accepts delivery while the order is 'delivering' -> 'delivered'.
   Future<void> acceptDelivery(String requestId, String customerId);

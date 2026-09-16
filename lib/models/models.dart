@@ -222,6 +222,10 @@ class CustomerRequest {
   /// under the archive view. Archiving never deletes the underlying order.
   final bool archived;
 
+  /// True once a price quote has been converted into a supply request, so the
+  /// convert action cannot be repeated and duplicate orders are never created.
+  final bool converted;
+
   CustomerRequest({
     required this.id,
     this.orderNo = 0,
@@ -238,6 +242,7 @@ class CustomerRequest {
     required this.items,
     this.type = 'supply',
     this.archived = false,
+    this.converted = false,
   });
 
   /// Human-readable order reference: sequential #orderNo when available,
@@ -283,6 +288,7 @@ class CustomerRequest {
           .toList(),
       type: json['type'] ?? 'supply',
       archived: json['archived'] ?? false,
+      converted: json['converted'] ?? false,
     );
   }
 }

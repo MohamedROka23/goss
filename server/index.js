@@ -1125,6 +1125,15 @@ app.patch("/api/requests/:id", auth, requirePerm("requests"), async (req, res) =
   const db = loadDb();
   const i = db.requests.findIndex((r) => r.id === req.params.id);
   if (i < 0) return res.status(404).json({ error: "Not found" });
+  // Customer-side archive: only the order owner may flip the archived flag.
+  if (req.body.archived !== undefined) {
+    const customerId = req.headers["x-customer-id"];
+    const owner = db.requests[i].customerId;
+    const isAdminRoute = req.body._admin === true;
+    if (!isAdminRoute && (!customerId || !owner || owner !== customerId)) {
+      return res.status(403).json({ error: "Not your request" });
+    }
+  }
   if (req.body.status !== undefined && !REQUEST_STATUSES.has(req.body.status)) {
     return res.status(400).json({ error: "Unknown status" });
   }
@@ -1132,6 +1141,9 @@ app.patch("/api/requests/:id", auth, requirePerm("requests"), async (req, res) =
   db.requests[i].status = req.body.status || prev;
   if (req.body.archived !== undefined) {
     db.requests[i].archived = !!req.body.archived;
+  }
+  if (req.body.converted !== undefined) {
+    db.requests[i].converted = !!req.body.converted;
   }
   saveDb(db);
   if (db.requests[i].status !== prev) {

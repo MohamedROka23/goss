@@ -16,6 +16,7 @@ class MyOrdersScreen extends StatefulWidget {
 
 class _MyOrdersScreenState extends State<MyOrdersScreen> {
   bool _acting = false;
+  bool _showArchive = false;
   Timer? _poll;
 
   @override
@@ -90,23 +91,60 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
     }
   }
 
+  Future<void> _toggleArchive(AppProvider app, bool en, CustomerRequest r) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(r.archived
+            ? (en ? 'Restore order' : 'استعادة الطلب')
+            : (en ? 'Archive order' : 'أرشفة الطلب')),
+        content: Text(r.archived
+            ? (en ? 'Restore this order to active list?' : 'استعادة هذا الطلب للقائمة النشطة؟')
+            : (en ? 'Move this order to the archive?' : 'نقل هذا الطلب إلى الأرشيف؟')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(en ? 'Cancel' : 'إلغاء')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(r.archived ? (en ? 'Restore' : 'استعادة') : (en ? 'Archive' : 'أرشفة')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _acting = true);
+    final err = await app.archiveMyOrder(r, archived: !r.archived);
+    if (!mounted) return;
+    setState(() => _acting = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(err.isEmpty
+          ? (r.archived
+              ? (en ? 'Order restored.' : 'تمت استعادة الطلب.')
+              : (en ? 'Order archived.' : 'تمت أرشفة الطلب.'))
+          : err),
+      backgroundColor: err.isEmpty ? GossColors.green : GossColors.red,
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppProvider>();
     final en = !app.isArabic;
-    final requests = app.myRequests;
+    final allRequests = app.myRequests;
     final loading = app.myRequestsLoading;
+    final active = allRequests.where((r) => !r.archived).toList();
+    final archive = allRequests.where((r) => r.archived).toList();
+    final visible = _showArchive ? archive : active;
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: GossColors.navy,
         title: Text(en ? 'My Orders' : '\u0637\u0644\u0628\u0627\u062a\u064a'),
       ),
-      body: loading && requests.isEmpty
+      body: loading && allRequests.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: () => app.loadMyRequests(),
-              child: requests.isEmpty
+              child: allRequests.isEmpty
                   ? ListView(
                       children: [
                         const SizedBox(height: 80),
@@ -130,7 +168,36 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                           style: TextStyle(color: context.mutedColor, fontSize: 13),
                         ),
                         const SizedBox(height: 12),
-                        ...requests.map((r) => _orderCard(app, en, r)),
+                        SegmentedButton<bool>(
+                          segments: [
+                            ButtonSegment(
+                              value: false,
+                              label: Text(en ? 'Active' : 'نشطة'),
+                              icon: const Icon(Icons.list_alt, size: 18),
+                            ),
+                            ButtonSegment(
+                              value: true,
+                              label: Text(en ? 'Archive' : '\u0623\u0631\u0634\u064a\u0641'),
+                              icon: const Icon(Icons.archive_outlined, size: 18),
+                            ),
+                          ],
+                          selected: {_showArchive},
+                          onSelectionChanged: (s) => setState(() => _showArchive = s.first),
+                        ),
+                        const SizedBox(height: 12),
+                        if (visible.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 32),
+                            child: Center(
+                              child: Text(
+                                _showArchive
+                                    ? (en ? 'No archived orders' : 'لا توجد طلبات مؤرشفة')
+                                    : (en ? 'No active orders' : 'لا توجد طلبات نشطة'),
+                                style: TextStyle(color: context.mutedColor),
+                              ),
+                            ),
+                          ),
+                        ...visible.map((r) => _orderCard(app, en, r)),
                       ],
                     ),
             ),
@@ -189,11 +256,24 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                     ),
                     const SizedBox(width: 6),
                     RequestStatusChip(status: r.status, isArabic: !en),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: r.archived
+                          ? (en ? 'Restore from archive' : 'استعادة من الأرشيف')
+                          : (en ? 'Archive order' : 'أرشفة الطلب'),
+                      icon: Icon(
+                        r.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
+                        size: 18,
+                        color: context.mutedColor,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _acting ? null : () => _toggleArchive(app, en, r),
+                    ),
                   ],
                 ),
               ],
             ),
-if (isQuote) ...[
+if (isQuote && !r.converted) ...[
               const Divider(height: 20),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -266,6 +346,30 @@ if (isQuote) ...[
                       if (mounted) setState(() => _acting = false);
                     }
                   },
+                ),
+              ),
+            ],
+            if (isQuote && r.converted) ...[
+              const Divider(height: 20),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: GossColors.green.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_outline, size: 18, color: GossColors.green),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        en
+                            ? 'This quote has been converted to a supply request.'
+                            : 'تم تحويل هذا العرض إلى طلب توريد.',
+                        style: TextStyle(fontSize: 12.5, color: context.bodyColor, height: 1.35),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

@@ -210,6 +210,7 @@ class AdminProvider extends ChangeNotifier {
       items: r.items,
       type: r.type,
       archived: archived,
+      converted: r.converted,
     );
   }
 

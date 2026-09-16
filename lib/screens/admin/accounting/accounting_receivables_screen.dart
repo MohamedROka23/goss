@@ -18,6 +18,8 @@ class AccountingReceivablesScreen extends StatefulWidget {
 }
 
 class _AccountingReceivablesScreenState extends State<AccountingReceivablesScreen> {
+  bool _showArchive = false;
+
   String _fmt(String date) {
     try {
       return DateFormat('yyyy-MM-dd').format(DateTime.parse(date).toLocal());
@@ -36,6 +38,9 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
       requests: admin.requests,
       payments: admin.payments,
     );
+    final activeReceivables = receivables.where((r) => r.balance > 0).toList();
+    final archivedReceivables = receivables.where((r) => r.balance <= 0).toList();
+    final visibleReceivables = _showArchive ? archivedReceivables : activeReceivables;
     var totalInvoices = 0.0;
     var totalCollected = 0.0;
     var totalOutstanding = 0.0;
@@ -87,17 +92,38 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
             ],
           ),
           const SizedBox(height: 16),
+          SegmentedButton<bool>(
+            segments: [
+              ButtonSegment(
+                value: false,
+                label: Text(en ? 'Outstanding' : 'نشطة'),
+                icon: const Icon(Icons.list_alt, size: 18),
+              ),
+              ButtonSegment(
+                value: true,
+                label: Text(en ? 'Fully paid' : 'مدفوعة (أرشيف)'),
+                icon: const Icon(Icons.archive_outlined, size: 18),
+              ),
+            ],
+            selected: {_showArchive},
+            onSelectionChanged: (s) => setState(() => _showArchive = s.first),
+          ),
+          const SizedBox(height: 12),
 
-          if (receivables.isEmpty)
+          if (visibleReceivables.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Center(
-                child: Text(en ? 'No invoices yet' : 'لا توجد فواتير بعد',
-                    style: TextStyle(color: context.mutedColor)),
+                child: Text(
+                  _showArchive
+                      ? (en ? 'No fully paid invoices' : 'لا توجد فواتير مدفوعة بالكامل')
+                      : (en ? 'No outstanding invoices' : 'لا توجد فواتير متأخرة'),
+                  style: TextStyle(color: context.mutedColor),
+                ),
               ),
             ),
 
-          ...receivables.map((r) => _receivableCard(app, admin, en, r)),
+          ...visibleReceivables.map((r) => _receivableCard(app, admin, en, r)),
 
           const SizedBox(height: 20),
           Text(en ? 'Payment history' : 'سجل المدفوعات',
@@ -507,6 +533,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
       'cash': _en ? 'Cash' : 'نقدي',
       'bank': _en ? 'Bank transfer' : 'تحويل بنكي',
       'instapay': _en ? 'InstaPay' : 'إنستاباي',
+      'cheque': _en ? 'Cheque' : 'شيك',
     };
     return AlertDialog(
       title: Text(_en ? 'Record payment' : 'تسجيل سداد'),

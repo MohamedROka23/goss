@@ -520,6 +520,29 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
+  Future<void> markRequestConverted(String token, String id) async {
+    final ref = _db.collection('requests').doc(id);
+    final snap = await ref.get();
+    if (!snap.exists) throw Exception('Request not found');
+    await ref.update({'converted': true});
+  }
+
+  @override
+  Future<void> archiveMyRequest(
+    String requestId,
+    String customerId, {
+    required bool archived,
+  }) async {
+    final ref = _db.collection('requests').doc(requestId);
+    final snap = await ref.get();
+    if (!snap.exists) throw Exception('Request not found');
+    if (snap.data()?['customerId'] != customerId) {
+      throw Exception('Not your request');
+    }
+    await ref.update({'archived': archived});
+  }
+
+  @override
   Future<List<Purchase>> fetchPurchases(String token) async {
     final snap = await _db
         .collection('purchases')

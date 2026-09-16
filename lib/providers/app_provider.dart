@@ -891,6 +891,19 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
+  /// Customer-side archive: hides one of the customer's own orders (or restores).
+  Future<String> archiveMyOrder(CustomerRequest r, {required bool archived}) async {
+    try {
+      final id = await BackendManager.customerId();
+      final backend = await BackendManager.resolve();
+      await backend.archiveMyRequest(r.id, id, archived: archived);
+      await loadMyRequests(silent: true);
+      return '';
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<void> logout() async {
     final legacyToken = _token;
     _token = null;
@@ -989,6 +1002,7 @@ class AppProvider extends ChangeNotifier {
 
   /// Convert a quote request into a supply request using the same items.
   Future<void> convertQuoteToSupply(CustomerRequest quote) async {
+    if (quote.converted) return;
     _loading = true;
     _error = null;
     notifyListeners();
@@ -1015,6 +1029,12 @@ class AppProvider extends ChangeNotifier {
         'destination': quote.destination,
         'type': 'supply',
       });
+      // Flag the original quote as converted so the action cannot repeat.
+      if (quote.customerId.isNotEmpty) {
+        try {
+          await backend.markRequestConverted(_token ?? '', quote.id);
+        } catch (_) {}
+      }
       await loadMyRequests();
       _loading = false;
       notifyListeners();

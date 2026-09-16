@@ -401,6 +401,30 @@ class HttpBackend implements GossBackend {
     final res = await _client.patch(
       _uri('/api/requests/$id'),
       headers: _headers(token: token),
+      body: jsonEncode({'archived': archived, '_admin': true}),
+    );
+    _check(res);
+  }
+
+  @override
+  Future<void> markRequestConverted(String token, String id) async {
+    final res = await _client.patch(
+      _uri('/api/requests/$id'),
+      headers: _headers(token: token),
+      body: jsonEncode({'converted': true}),
+    );
+    _check(res);
+  }
+
+  @override
+  Future<void> archiveMyRequest(
+    String requestId,
+    String customerId, {
+    required bool archived,
+  }) async {
+    final res = await _client.patch(
+      _uri('/api/requests/$requestId'),
+      headers: {..._headers(), 'X-Customer-Id': customerId},
       body: jsonEncode({'archived': archived}),
     );
     _check(res);

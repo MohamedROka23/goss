@@ -19,6 +19,7 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
   DateTime? _from;
   DateTime? _to;
   bool _selectAll = false;
+  bool _showArchive = false;
   final _search = TextEditingController();
 
   @override
@@ -51,7 +52,8 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
   }
 
   String _customerName(String key, Map<String, List<CustomerRequest>> map) {
-    return map[key]!.first.name;
+    final base = key.endsWith('\x00archive') ? key.substring(0, key.length - 8) : key;
+    return map[base]!.first.name;
   }
 
   double _invoiceTotal(CustomerRequest r) {
@@ -153,14 +155,24 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
     final en = !app.isArabic;
     final products = app.products;
     final byCustomer = _byCustomer(admin.requests);
+    final allByCustomer = <String, List<CustomerRequest>>{};
+    for (final e in byCustomer.entries) {
+      final activeReqs = e.value.where((r) => !r.archived).toList();
+      final archivedReqs = e.value.where((r) => r.archived).toList();
+      if (activeReqs.isNotEmpty) allByCustomer[e.key] = activeReqs;
+      if (archivedReqs.isNotEmpty) allByCustomer['${e.key}\x00archive'] = archivedReqs;
+    }
+    final viewMap = _showArchive
+        ? allByCustomer.entries.where((e) => e.key.endsWith('\x00archive')).toList()
+        : allByCustomer.entries.where((e) => !e.key.endsWith('\x00archive')).toList();
 
-    final filteredCustomers = byCustomer.entries.where((e) {
+    final filteredCustomers = viewMap.where((e) {
       return e.value.any((r) => _inRange(r) && _matchSearch(r));
     }).toList();
 
     final customersView = filteredCustomers.isNotEmpty
         ? filteredCustomers
-        : byCustomer.entries.toList();
+        : viewMap;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -201,6 +213,15 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
           style: TextStyle(color: context.mutedColor),
         ),
         const SizedBox(height: 12),
+        SegmentedButton<bool>(
+          segments: [
+            ButtonSegment(value: false, label: Text(en ? 'Active' : 'نشطة'), icon: const Icon(Icons.list_alt, size: 18)),
+            ButtonSegment(value: true, label: Text(en ? 'Archive' : 'أرشيف'), icon: const Icon(Icons.archive_outlined, size: 18)),
+          ],
+          selected: {_showArchive},
+          onSelectionChanged: (s) => setState(() => _showArchive = s.first),
+        ),
+        const SizedBox(height: 8),
         TextField(
           controller: _search,
           onChanged: (_) => setState(() {}),
@@ -284,7 +305,7 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
         }),
         const SizedBox(height: 12),
         if (_selected.isNotEmpty)
-          ..._buildDetails(context, en, byCustomer, products, _selected),
+          ..._buildDetails(context, en, allByCustomer, products, _selected),
       ],
     );
   }
