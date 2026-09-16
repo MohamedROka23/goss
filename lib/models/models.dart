@@ -561,6 +561,11 @@ class RequestStatus {
 
   /// Whether a status is sealed and cannot be re-edited by the admin.
   static bool isFrozen(String status) => frozen.contains(status);
+
+  /// Completed/terminal states (delivered + sealed). These are hidden from the
+  /// active tracking/requests views and only live under the archive.
+  static bool isDone(String status) =>
+      status == delivered || frozen.contains(status);
 }
 
 const List<String> requestStatusValues = RequestStatus.all;

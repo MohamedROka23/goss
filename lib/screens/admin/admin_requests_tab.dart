@@ -46,9 +46,9 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
     final en = !app.isArabic;
     final requests = admin.requests;
     final archivedRequests =
-        requests.where((r) => r.archived || RequestStatus.isFrozen(r.status)).toList();
+        requests.where((r) => r.archived || RequestStatus.isDone(r.status)).toList();
     final activeRequests =
-        requests.where((r) => !r.archived && !RequestStatus.isFrozen(r.status)).toList();
+        requests.where((r) => !r.archived && !RequestStatus.isDone(r.status)).toList();
     final base = _showArchive ? archivedRequests : activeRequests;
     final filterStr = _filterDate == null ? null : DateFormat('yyyy-MM-dd').format(_filterDate!);
     final filtered = filterStr == null

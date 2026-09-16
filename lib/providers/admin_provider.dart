@@ -178,14 +178,24 @@ class AdminProvider extends ChangeNotifier {
   }
 
   Future<void> archiveRequest(String token, String id, {required bool archived}) async {
-    final idx = _requests.indexWhere((r) => r.id == id);
-    if (idx >= 0 && _requests[idx].archived != archived) {
-      _requests[idx] = _copyWithArchived(_requests[idx], archived);
-      notifyListeners();
+    await archiveRequests(token, [id], archived: archived);
+  }
+
+  Future<void> archiveRequests(String token, List<String> ids, {required bool archived}) async {
+    if (ids.isEmpty) {
+      await loadRequests(token);
+      return;
     }
     try {
       final backend = await BackendManager.resolve();
-      await backend.archiveRequest(token, id, archived: archived);
+      for (final id in ids) {
+        await backend.archiveRequest(token, id, archived: archived);
+        final idx = _requests.indexWhere((r) => r.id == id);
+        if (idx >= 0 && _requests[idx].archived != archived) {
+          _requests[idx] = _copyWithArchived(_requests[idx], archived);
+        }
+      }
+      notifyListeners();
       _lastError = null;
     } catch (e) {
       _setError(e);

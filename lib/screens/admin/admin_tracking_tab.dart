@@ -18,6 +18,7 @@ class AdminTrackingTab extends StatefulWidget {
 
 class _AdminTrackingTabState extends State<AdminTrackingTab> {
   DateTime? _filterDate;
+  bool _showArchive = false;
   final _search = TextEditingController();
 
   @override
@@ -68,9 +69,12 @@ class _AdminTrackingTabState extends State<AdminTrackingTab> {
     final admin = context.watch<AdminProvider>();
     final en = !app.isArabic;
     final requests = admin.requests;
+    final baseList = _showArchive
+        ? requests.where((r) => r.archived || RequestStatus.isDone(r.status)).toList()
+        : requests.where((r) => !r.archived && !RequestStatus.isDone(r.status)).toList();
     final filterStr = _filterDate == null ? null : DateFormat('yyyy-MM-dd').format(_filterDate!);
     final query = _search.text.trim().toLowerCase();
-    final filtered = requests.where((r) {
+    final filtered = baseList.where((r) {
       final dateOk = filterStr == null || _dayStr(r.createdAt) == filterStr;
       final searchOk = query.isEmpty ||
           r.name.toLowerCase().contains(query) ||
@@ -111,6 +115,23 @@ Text(
                           ? 'Follow every order stage in real time.'
                           : '\u062a\u0627\u0628\u0639 \u0645\u0631\u0627\u062d\u0644 \u0643\u0644 \u0637\u0644\u0628 \u0644\u062d\u0638\u0629 \u0628\u0644\u062d\u0638\u0629.',
                       style: TextStyle(color: context.mutedColor, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<bool>(
+                      segments: [
+                        ButtonSegment(
+                          value: false,
+                          label: Text(en ? 'Active' : '\u0646\u0634\u0637\u0629'),
+                          icon: const Icon(Icons.route_outlined, size: 18),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          label: Text(en ? 'Archive (delivered)' : '\u0623\u0631\u0634\u064a\u0641 (\u0627\u0644\u0645\u0633\u0644\u0645)'),
+                          icon: const Icon(Icons.archive_outlined, size: 18),
+                        ),
+                      ],
+                      selected: {_showArchive},
+                      onSelectionChanged: (s) => setState(() => _showArchive = s.first),
                     ),
                     const SizedBox(height: 8),
                     TextField(

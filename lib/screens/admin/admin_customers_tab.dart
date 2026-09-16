@@ -78,6 +78,50 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
     return true;
   }
 
+  List<CustomerRequest> get requests => context.read<AdminProvider>().requests;
+
+  Future<void> _bulkArchive(AppProvider app, AdminProvider admin, bool en) async {
+    if (_selected.isEmpty) return;
+    final ids = <String>[];
+    for (final key in _selected) {
+      final base = key.endsWith('\x00archive') ? key.substring(0, key.length - 8) : key;
+      ids.addAll(admin.requests.where((r) {
+        final k = '${r.phone.trim()}\u0000${r.name.trim().toLowerCase()}';
+        return k == base;
+      }).map((r) => r.id));
+    }
+    if (ids.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(en ? 'Archive selected customers' : 'أرشفة العملاء المحددين'),
+        content: Text(en
+            ? 'Move all orders of the ${_selected.length} selected customer(s) to the archive?'
+            : 'نقل كل طلبات العملاء المحددين (${_selected.length}) إلى الأرشيف؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(en ? 'Cancel' : 'إلغاء')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(en ? 'Archive' : 'أرشفة'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await admin.archiveRequests(app.token!, ids, archived: !_showArchive);
+    if (!mounted) return;
+    setState(() {
+      _selected.clear();
+      _selectAll = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(_showArchive
+          ? (en ? 'Customers restored to active.' : 'تمت استعادة العملاء إلى النشطة.')
+          : (en ? 'Customers archived.' : 'تمت أرشفة العملاء.')),
+      backgroundColor: GossColors.green,
+    ));
+  }
+
   Future<void> _pickDate(BuildContext context, bool en) async {
     await showDialog<void>(
       context: context,
@@ -251,6 +295,18 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
             ),
             Text(en ? 'Select all' : 'تحديد الكل'),
             const Spacer(),
+            if (_selected.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: () => _bulkArchive(app, admin, en),
+                icon: Icon(
+                  _showArchive ? Icons.unarchive_outlined : Icons.archive_outlined,
+                  size: 18,
+                ),
+                label: Text(_showArchive
+                    ? (en ? 'Restore' : 'استعادة')
+                    : (en ? 'Archive' : 'أرشفة')),
+              ),
+            const SizedBox(width: 8),
             if (_selected.isNotEmpty)
               Text(
                 '${_selected.length} ${en ? 'selected' : 'محدد'}',
