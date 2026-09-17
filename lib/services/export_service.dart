@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/models.dart';
+import 'xlsx_fix.dart';
 
 class ExportService {
   static final _arabicPattern = RegExp(r'[\u0600-\u06FF]');
@@ -426,7 +427,8 @@ class ExportService {
 
     final bytes = wb.encode();
     if (bytes == null) return;
-    final file = await _writeToTemp(Uint8List.fromList(bytes), '$sheetName.xlsx');
+    final file = await _writeToTemp(
+        fixXlsxArtifacts(Uint8List.fromList(bytes)), '$sheetName.xlsx');
     await _share(file, '$sheetName.xlsx');
   }
 }

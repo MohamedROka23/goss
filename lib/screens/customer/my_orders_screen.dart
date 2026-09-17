@@ -133,10 +133,12 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
     final allRequests = app.myRequests;
     final loading = app.myRequestsLoading;
     // Completed orders leave the active list automatically (they are archived
-    // on the server once a terminal status is reached). The customer can still
-    // restore them from the archive like the admin.
+    // on the server once a terminal status is reached). A quote that has been
+    // converted into a supply request disappears too, since the supply request
+    // replaces it in the list.
     final active = allRequests
-        .where((r) => !r.archived && !RequestStatus.isDone(r.status))
+        .where((r) =>
+            !r.archived && !RequestStatus.isDone(r.status) && !r.converted)
         .toList();
     final archive = allRequests
         .where((r) => r.archived || RequestStatus.isDone(r.status))

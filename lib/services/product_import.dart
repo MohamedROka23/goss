@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
 import '../models/models.dart';
+import 'xlsx_fix.dart';
 
 /// Excel bulk-import for products backed by the same columns the app uses:
 /// categories/sections, product names, unit, quantity(stock), selling price,
@@ -144,7 +145,8 @@ Uint8List buildProductImportTemplate() {
   sheet.setDefaultColumnWidth(18);
   sheet.setRowHeight(0, 30);
   final bytes = wb.encode();
-  return bytes == null ? Uint8List(0) : Uint8List.fromList(bytes);
+  if (bytes == null) return Uint8List(0);
+  return fixXlsxArtifacts(Uint8List.fromList(bytes));
 }
 
 /// Parses an uploaded sheet into categories and products.

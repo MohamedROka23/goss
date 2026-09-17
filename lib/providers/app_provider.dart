@@ -964,6 +964,7 @@ class AppProvider extends ChangeNotifier {
     String destination = '',
     String type = 'supply',
     bool vat = false,
+    List<CartItem>? lines,
   }) async {
     // One submit at a time: a double tap must never create a duplicate order.
     if (_requestInFlight) {
@@ -974,14 +975,22 @@ class AppProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      final items = cartLines.map((e) => {
-        'productId': e.value.id,
-        'nameEn': e.value.nameEn,
-        'nameAr': e.value.nameAr,
-        'qty': e.key.qty,
-        'unit': e.value.unit,
-        'price': e.value.price,
-      }).toList();
+      // The dedicated Quote screen keeps its own local list, so use the lines
+      // it passes; otherwise fall back to the shared catalog cart.
+      final sourceLines = lines ?? _cart;
+      final items = sourceLines.map((c) {
+        final match = _products.where((p) => p.id == c.productId);
+        if (match.isEmpty) return null;
+        final p = match.first;
+        return <String, dynamic>{
+          'productId': p.id,
+          'nameEn': p.nameEn,
+          'nameAr': p.nameAr,
+          'qty': c.qty,
+          'unit': p.unit,
+          'price': p.price,
+        };
+      }).whereType<Map<String, dynamic>>().toList();
       final backend = await BackendManager.resolve();
       await backend.submitRequest({
         'token': _token ?? '',
@@ -997,7 +1006,9 @@ class AppProvider extends ChangeNotifier {
         'type': type,
         'vat': vat,
       });
-      clearCart();
+      // Only clear the shared catalog cart when it was the source; a local
+      // quote cart is cleared by its own screen.
+      if (lines == null) clearCart();
       _loading = false;
       _requestInFlight = false;
       notifyListeners();

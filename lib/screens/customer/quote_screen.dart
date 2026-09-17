@@ -537,6 +537,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
                   notes: _notesCtrl.text,
                   type: 'quote',
                   vat: _vat,
+                  lines: _lines,
                 );
                 if (!mounted) return;
                 _lines.clear();
