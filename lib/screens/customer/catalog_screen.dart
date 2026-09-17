@@ -32,6 +32,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
   final _originCtrl = TextEditingController();
   final _destinationCtrl = TextEditingController();
   final Map<String, TextEditingController> _qtyCtrls = {};
+  bool _vat = false;
 
   @override
   void initState() {
@@ -50,6 +51,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 
   void _resetForm() {
+    _vat = false;
     _companyCtrl.clear();
     _nameCtrl.clear();
     _phoneCtrl.clear();
@@ -267,6 +269,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
   Widget _cartPanel(BuildContext context, AppProvider app, bool en) {
     final lines = app.cartLines;
     final total = app.cartTotal;
+    final vatAmount = _vat ? total * 0.14 : 0.0;
+    final grandTotal = total + vatAmount;
 
     return Card(
       child: Padding(
@@ -406,8 +410,53 @@ class _CatalogScreenState extends State<CatalogScreen> {
               );
             }),
             const Divider(),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  const Icon(Icons.sell_outlined, size: 18, color: GossColors.navy),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => setState(() => _vat = !_vat),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            en ? 'Include 14% VAT' : '\u062e\u0635 \u0636\u0631\u064a\u0628\u0629 14%',
+                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                          Text(
+                            en ? 'Adds 14% service tax on top (optional)'
+                                : '\u062a\u0636\u064a\u0641 14% \u0636\u0631\u064a\u0628\u0629 \u0639\u0644\u0649 \u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a (اختياري)',
+                            style: TextStyle(color: context.mutedColor, fontSize: 11.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Switch(
+                    value: _vat,
+                    activeTrackColor: GossColors.navy,
+                    onChanged: (v) => setState(() => _vat = v),
+                  ),
+                ],
+              ),
+            ),
+            if (_vat)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  '${en ? "Subtotal" : "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a"}: ${en ? 'EGP' : '\u062c.\u0645'} ${total.toStringAsFixed(2)}'
+                  '   •   14% ${en ? 'VAT' : '\u0636\u0631\u064a\u0628\u0629'}: ${en ? 'EGP' : '\u062c.\u0645'} ${vatAmount.toStringAsFixed(2)}',
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(color: context.mutedColor, fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
+              ),
             Text(
-              '${en ? "Estimated total" : "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u062a\u0642\u062f\u064a\u0631\u064a"}: ${en ? 'EGP' : '\u062c.\u0645'} ${total.toStringAsFixed(2)}',
+              '${en ? "Estimated total" : "\u0627\u0644\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u062a\u0642\u062f\u064a\u0631\u064a"}: ${en ? 'EGP' : '\u062c.\u0645'} ${grandTotal.toStringAsFixed(2)}'
+              '${_vat ? '  (${en ? 'incl. VAT' : '\u0634\u0627\u0645\u0644 \u0627\u0644\u0636\u0631\u064a\u0628\u0629'}) ' : ''}',
               textDirection: TextDirection.ltr,
               style: TextStyle(fontWeight: FontWeight.w700, color: context.headingColor),
             ),
@@ -591,6 +640,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   origin: _originCtrl.text,
                   destination: _destinationCtrl.text,
                   type: 'supply',
+                  vat: _vat,
                 );
                 if (!mounted) return;
                 _resetForm();

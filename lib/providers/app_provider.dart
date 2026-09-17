@@ -246,11 +246,16 @@ class AppProvider extends ChangeNotifier {
   bool _loading = false;
   bool get loading => _loading;
 
+  /// Guards against duplicate request submission from a double tap while the
+  /// previous submit is still in flight.
+  bool _requestInFlight = false;
+
   String? _error;
   String? get error => _error;
 
   StreamSubscription<List<Product>>? _productSub;
   StreamSubscription<List<PriceUpdateNotification>>? _notifSub;
+  StreamSubscription<AdminUser?>? _adminSub;
   List<PriceUpdateNotification> _notifs = [];
   List<PriceUpdateNotification> get notifications => _notifs;
   String _lastSeenNotifAt = '';
@@ -325,6 +330,7 @@ class AppProvider extends ChangeNotifier {
     await loadCategories();
     if (_token != null) {
       await resolveCurrentAdmin();
+      await watchOwnAdmin();
     }
     _startConnectivityWatch();
   }
@@ -622,6 +628,7 @@ class AppProvider extends ChangeNotifier {
       notifyListeners();
       FcmService.instance.onAdminLoggedIn(_token!);
       await resolveCurrentAdmin();
+      await watchOwnAdmin();
       return true;
     } catch (e) {
       _error = e.toString();
@@ -675,6 +682,33 @@ class AppProvider extends ChangeNotifier {
 
   /// Finds the current admin's profile (role + permissions) from the team list
   /// and caches it locally so the dashboard can gate tabs offline.
+  /// Live-listens to the signed-in member's OWN /admins/{uid} document so the
+  /// permissions and role granted by the owner on another device take effect on
+  /// this device immediately, without a restart. Ignores the stream in HTTP
+  /// mode and when no Firestore session is resolved.
+  Future<void> watchOwnAdmin() async {
+    final uid = _currentAdmin?.id;
+    if (uid == null || uid.isEmpty) return;
+    final backend = await BackendManager.resolve();
+    if (!backend.isFirebase) return;
+    await _adminSub?.cancel();
+    _adminSub = backend.watchOwnAdmin(uid).listen((snap) {
+      if (snap == null || _disposed) return;
+      final prev = _currentAdmin;
+      _currentAdmin = snap;
+      _cachedPermissions =
+          snap.permissions.isNotEmpty ? snap.permissions : defaultPermissionsFor(snap.role);
+      _activeRole = snap.role;
+      if (snap.role != prev?.role) {
+        unawaited(SecureStore.writeAdminRole(snap.role));
+      }
+      if (prev?.permissions != snap.permissions || prev?.role != snap.role) {
+        unawaited(SecureStore.writeAdminPermissions(permissions.toList()));
+      }
+      notifyListeners();
+    });
+  }
+
   Future<void> resolveCurrentAdmin() async {
     if (_token == null) return;
     try {
@@ -716,23 +750,6 @@ class AppProvider extends ChangeNotifier {
     }
     await SecureStore.writeAdminPermissions(permissions.toList());
     notifyListeners();
-  }
-
-  Future<String> registerAdmin({
-    required String name,
-    required String email,
-    required String password,
-    required String code,
-  }) async {
-    try {
-      final backend = await BackendManager.resolve();
-      await backend.registerAdmin(name, email, password, code);
-      final ok = await loginAdmin(email, password);
-      if (!ok) throw Exception('Account created, please sign in');
-      return '';
-    } catch (e) {
-      return e.toString();
-    }
   }
 
   Future<String> changeAdminPassword({
@@ -948,6 +965,11 @@ class AppProvider extends ChangeNotifier {
     String type = 'supply',
     bool vat = false,
   }) async {
+    // One submit at a time: a double tap must never create a duplicate order.
+    if (_requestInFlight) {
+      throw Exception('Request is already being sent');
+    }
+    _requestInFlight = true;
     _loading = true;
     _error = null;
     notifyListeners();
@@ -977,9 +999,11 @@ class AppProvider extends ChangeNotifier {
       });
       clearCart();
       _loading = false;
+      _requestInFlight = false;
       notifyListeners();
     } catch (e) {
       _loading = false;
+      _requestInFlight = false;
       _error = e.toString();
       notifyListeners();
       rethrow;
@@ -989,6 +1013,9 @@ class AppProvider extends ChangeNotifier {
   /// Convert a quote request into a supply request using the same items.
   Future<void> convertQuoteToSupply(CustomerRequest quote) async {
     if (quote.converted) return;
+    // A double tap must never create two supply requests from one quote.
+    if (_requestInFlight) return;
+    _requestInFlight = true;
     _loading = true;
     _error = null;
     notifyListeners();
@@ -1023,9 +1050,11 @@ class AppProvider extends ChangeNotifier {
       }
       await loadMyRequests();
       _loading = false;
+      _requestInFlight = false;
       notifyListeners();
     } catch (e) {
       _loading = false;
+      _requestInFlight = false;
       _error = e.toString();
       notifyListeners();
       rethrow;

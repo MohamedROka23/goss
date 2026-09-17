@@ -249,67 +249,6 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
-  Future<void> registerAdmin(
-    String name,
-    String email,
-    String password,
-    String code,
-  ) async {
-    final regCode = code.trim();
-    if (regCode.isEmpty) {
-      throw Exception('Admin registration code is required');
-    }
-    try {
-      final cred = await _auth.createUserWithEmailAndPassword(
-        email: email.trim(),
-        password: password,
-      );
-      // Self-registration is provisioning zero: the new team member is created
-      // as a bare delegate (no permissions) and a super admin grants access
-      // later through the team panel. Rules never trust a public register code.
-      final doc = _db.collection('admins').doc(cred.user?.uid ?? '');
-      await _writeAdminBootstrapDoc(doc, name, email);
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        // The auth account already exists (e.g. from an earlier registration
-        // that could not write /admins/{uid} under the old rules). Verify the
-        // password, then create the missing admin document for that uid.
-        try {
-          final cred = await _auth.signInWithEmailAndPassword(
-            email: email.trim(),
-            password: password,
-          );
-          final uid = cred.user?.uid ?? '';
-          if (uid.isEmpty) throw Exception('Registration failed');
-          final doc = _db.collection('admins').doc(uid);
-          await _writeAdminBootstrapDoc(doc, name, email);
-        } catch (_) {
-          throw Exception('An account with this email already exists');
-        }
-        return;
-      }
-      throw Exception(e.message ?? 'Registration failed');
-    }
-  }
-
-  /// Writes the /admins/{uid} document as an UNPRIVILEGED delegate so no one
-  /// can self-register admin access (matches the Firestore rules). A super
-  /// admin later assigns the role and permissions through the team panel.
-  Future<void> _writeAdminBootstrapDoc(
-    DocumentReference<Map<String, dynamic>> doc,
-    String name,
-    String email,
-  ) async {
-    await doc.set({
-      'name': name,
-      'email': email.trim(),
-      'role': 'delegate',
-      'permissions': <String>[],
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  @override
   Future<void> changeAdminPassword(
     String email,
     String oldPassword,
@@ -332,6 +271,14 @@ class FirestoreBackend implements GossBackend {
     return data.docs
         .map((d) => AdminUser.fromJson({...d.data(), 'id': d.id}))
         .toList();
+  }
+
+  @override
+  Stream<AdminUser?> watchOwnAdmin(String uid) {
+    return _db.collection('admins').doc(uid).snapshots().map((snap) {
+      if (!snap.exists) return null;
+      return AdminUser.fromJson({...snap.data()!, 'id': snap.id});
+    });
   }
 
   @override
@@ -480,7 +427,8 @@ class FirestoreBackend implements GossBackend {
     if (snap.data()?['customerId'] != customerId) {
       throw Exception('Not your request');
     }
-    await ref.update({'status': RequestStatus.confirmed});
+    // Confirmed delivery is a terminal state: archive it immediately.
+    await ref.update({'status': RequestStatus.confirmed, 'archived': true});
   }
 
   @override
@@ -491,7 +439,7 @@ class FirestoreBackend implements GossBackend {
     if (snap.data()?['customerId'] != customerId) {
       throw Exception('Not your request');
     }
-    await ref.update({'status': 'rejected'});
+    await ref.update({'status': 'rejected', 'archived': true});
   }
 
   @override
@@ -521,7 +469,13 @@ class FirestoreBackend implements GossBackend {
         current != status) {
       throw Exception('Order status is locked by the customer decision');
     }
-    await ref.update({'status': status});
+    // A completed/terminal state is archived immediately so it never stays in
+    // the active lists of either the admin or the customer.
+    final updates = <String, dynamic>{'status': status};
+    if (RequestStatus.isDone(status) && snap.data()?['archived'] != true) {
+      updates['archived'] = true;
+    }
+    await ref.update(updates);
   }
 
   @override
@@ -534,6 +488,11 @@ class FirestoreBackend implements GossBackend {
     final snap = await ref.get();
     if (!snap.exists) throw Exception('Request not found');
     await ref.update({'archived': archived});
+  }
+
+  @override
+  Future<void> deleteRequestAdmin(String token, String id) async {
+    await _db.collection('requests').doc(id).delete();
   }
 
   @override

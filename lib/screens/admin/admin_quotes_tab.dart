@@ -95,7 +95,7 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
           children: [
             Expanded(
               child: Text(
-                en ? 'Price quotes (Selling Price)' : '\u0639\u0631\u0648\u0636 \u0627\u0644\u0623\u0633\u0639\u0627\u0631 (\u0633\u0639\u0631 \u0627\u0644\u0628\u064a\u0639)',
+                en ? 'Add Products & Selling Prices' : '\u0625\u0636\u0627\u0641\u0629 \u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a \u0648\u0623\u0633\u0639\u0627\u0631 \u0627\u0644\u0628\u064a\u0639',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.headingColor),
               ),
             ),
@@ -233,7 +233,7 @@ Wrap(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _editId == null ? (en ? 'Add quote' : '\u0625\u0636\u0627\u0641\u0629 \u0639\u0631\u0636') : (en ? 'Edit quote' : '\u062a\u0639\u062f\u064a\u0644 \u0639\u0631\u0636'),
+              _editId == null ? (en ? 'Add product' : '\u0625\u0636\u0627\u0641\u0629 \u0645\u0646\u062a\u062c') : (en ? 'Edit product' : '\u062a\u0639\u062f\u064a\u0644 \u0645\u0646\u062a\u062c'),
               style: TextStyle(fontWeight: FontWeight.w700, color: context.headingColor),
             ),
             const SizedBox(height: 12),
@@ -342,7 +342,7 @@ Wrap(
             Row(
               children: [
                 GossButton(
-                  label: en ? 'Save quote' : '\u062d\u0641\u0638 \u0627\u0644\u0639\u0631\u0636',
+                  label: en ? 'Save product' : '\u062d\u0641\u0638 \u0627\u0644\u0645\u0646\u062a\u062c',
                   color: GossColors.blue,
                   onPressed: _saving
                       ? null
@@ -364,9 +364,17 @@ Wrap(
                               if (cur.isNotEmpty) oldPrice = cur.first.price;
                             }
                             final newPrice = double.tryParse(_price.text) ?? 0;
+                            // The dropdown shows the first available category
+                            // when the admin did not explicitly pick one, so
+                            // the saved category must be the one actually
+                            // displayed (effective), never the empty _category.
+                            final catIds = app.productCategories.map((c) => c.id).toList();
+                            final effectiveCat = catIds.contains(_category)
+                                ? _category
+                                : (catIds.isNotEmpty ? catIds.first : '');
                             final data = <String, dynamic>{
                               if (_editId != null) 'id': _editId,
-                              'category': _category,
+                              'category': effectiveCat,
                               'unit': _unit.text.isEmpty ? 'unit' : _unit.text,
                               'price': newPrice,
                               'costPrice': double.tryParse(_costPrice.text) ?? 0,

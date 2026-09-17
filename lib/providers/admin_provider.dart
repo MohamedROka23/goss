@@ -86,7 +86,7 @@ class AdminProvider extends ChangeNotifier {
       final backend = await BackendManager.resolve();
       await _requestSub?.cancel();
       _requestSub = backend.watchRequests(token: token).listen((list) {
-        _requests = list;
+        _requests = _adminVisible(list);
         notifyListeners();
       });
       _lastError = null;
@@ -138,13 +138,18 @@ class AdminProvider extends ChangeNotifier {
   Future<void> loadRequests(String token) async {
     try {
       final backend = await BackendManager.resolve();
-      _requests = await backend.fetchRequests(token);
+      _requests = _adminVisible(await backend.fetchRequests(token));
       _lastError = null;
       notifyListeners();
     } catch (e) {
       _setError(e);
     }
   }
+
+  /// Price quotes reach the team as notifications ONLY — they never appear in
+  /// the admin request lists, tracking, customers, or accounting views.
+  static List<CustomerRequest> _adminVisible(List<CustomerRequest> list) =>
+      list.where((r) => r.type != 'quote').toList();
 
   Future<void> updateRequestStatus(String token, String id, String status) async {
     final current = _requests.where((r) => r.id == id);
@@ -195,6 +200,24 @@ class AdminProvider extends ChangeNotifier {
           _requests[idx] = _copyWithArchived(_requests[idx], archived);
         }
       }
+      notifyListeners();
+      _lastError = null;
+    } catch (e) {
+      _setError(e);
+    }
+    await loadRequests(token);
+  }
+
+  /// Permanent deletion of the given request ids (admin only). Orders are
+  /// removed from Firestore and can never be restored.
+  Future<void> deleteRequests(String token, List<String> ids) async {
+    if (ids.isEmpty) return;
+    try {
+      final backend = await BackendManager.resolve();
+      for (final id in ids) {
+        await backend.deleteRequestAdmin(token, id);
+      }
+      _requests = _requests.where((r) => !ids.contains(r.id)).toList();
       notifyListeners();
       _lastError = null;
     } catch (e) {

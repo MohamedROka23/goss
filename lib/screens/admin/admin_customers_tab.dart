@@ -122,6 +122,48 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
     ));
   }
 
+  Future<void> _bulkDelete(AppProvider app, AdminProvider admin, bool en) async {
+    if (_selected.isEmpty) return;
+    // Resolve every request id of the selected customers (active view: all of
+    // their orders; archive view: only the archived ones).
+    final ids = <String>[];
+    for (final key in _selected) {
+      ids.addAll(admin.requests.where((r) {
+        final k = '${r.phone.trim()}\u0000${r.name.trim().toLowerCase()}';
+        return k == key;
+      }).map((r) => r.id));
+    }
+    if (ids.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(en ? 'Delete selected customers' : 'مسح العملاء المحددين'),
+        content: Text(en
+            ? 'Permanently delete ${ids.length} order(s) of the ${_selected.length} selected customer(s)? This cannot be undone.'
+            : 'مسح نهائي لـ ${ids.length} طلباً للعملاء المحددين (${_selected.length})؟ لا يمكن التراجع عن هذا الإجراء.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(en ? 'Cancel' : 'إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: GossColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(en ? 'Delete' : 'مسح'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await admin.deleteRequests(app.token!, ids);
+    if (!mounted) return;
+    setState(() {
+      _selected.clear();
+      _selectAll = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(en ? 'Orders deleted.' : 'تم مسح الطلبات.'),
+      backgroundColor: GossColors.red,
+    ));
+  }
+
   Future<void> _pickDate(BuildContext context, bool en) async {
     await showDialog<void>(
       context: context,
@@ -305,6 +347,16 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
                 label: Text(_showArchive
                     ? (en ? 'Restore' : 'استعادة')
                     : (en ? 'Archive' : 'أرشفة')),
+              ),
+            const SizedBox(width: 8),
+            if (_selected.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: () => _bulkDelete(app, admin, en),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: GossColors.red,
+                ),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: Text(en ? 'Delete' : 'مسح'),
               ),
             const SizedBox(width: 8),
             if (_selected.isNotEmpty)

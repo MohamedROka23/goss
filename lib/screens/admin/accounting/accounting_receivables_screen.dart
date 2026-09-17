@@ -19,6 +19,7 @@ class AccountingReceivablesScreen extends StatefulWidget {
 
 class _AccountingReceivablesScreenState extends State<AccountingReceivablesScreen> {
   bool _showArchive = false;
+  final Set<String> _selected = {};
 
   String _fmt(String date) {
     try {
@@ -26,6 +27,11 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
     } catch (_) {
       return date;
     }
+  }
+
+  List<Payment> _filteredPayments(List<Payment> all, List<Receivable> visible) {
+    final ids = visible.map((r) => r.request.id).toSet();
+    return all.where((p) => ids.contains(p.requestId)).toList();
   }
 
   @override
@@ -41,6 +47,7 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
     final activeReceivables = receivables.where((r) => r.balance > 0).toList();
     final archivedReceivables = receivables.where((r) => r.balance <= 0).toList();
     final visibleReceivables = _showArchive ? archivedReceivables : activeReceivables;
+    final history = _filteredPayments(admin.payments, visibleReceivables);
     var totalInvoices = 0.0;
     var totalCollected = 0.0;
     var totalOutstanding = 0.0;
@@ -106,8 +113,38 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
               ),
             ],
             selected: {_showArchive},
-            onSelectionChanged: (s) => setState(() => _showArchive = s.first),
+            onSelectionChanged: (s) => setState(() {
+              _showArchive = s.first;
+              _selected.clear();
+            }),
           ),
+          if (_showArchive) ...[
+            const SizedBox(height: 8),
+            _ArchiveToolbar(
+              en: en,
+              count: visibleReceivables.length,
+              selectedCount: _selected.length,
+              allSelected: visibleReceivables
+                  .where((r) => !_selected.contains(r.request.id))
+                  .isEmpty,
+              onToggleAll: () {
+                setState(() {
+                  if (visibleReceivables
+                      .where((r) => !_selected.contains(r.request.id))
+                      .isEmpty) {
+                    for (final r in visibleReceivables) {
+                      _selected.remove(r.request.id);
+                    }
+                  } else {
+                    for (final r in visibleReceivables) {
+                      _selected.add(r.request.id);
+                    }
+                  }
+                });
+              },
+              onDelete: () => _bulkDeleteArchived(app, admin, en),
+            ),
+          ],
           const SizedBox(height: 12),
 
           if (visibleReceivables.isEmpty)
@@ -129,15 +166,20 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
           Text(en ? 'Payment history' : 'سجل المدفوعات',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.headingColor)),
           const SizedBox(height: 8),
-          if (admin.payments.isEmpty)
+          if (history.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
-                child: Text(en ? 'No payments recorded' : 'لا توجد مدفوعات مسجلة',
-                    style: TextStyle(color: context.mutedColor)),
+                child: Text(
+                  _showArchive
+                      ? (en ? 'No payments for fully paid invoices.' : 'لا توجد مدفوعات للفواتير المدفوعة.')
+                      : (en ? 'No payments for outstanding invoices.' : 'لا توجد مدفوعات للفواتير المتأخرة.'),
+                  style: TextStyle(color: context.mutedColor),
+                ),
               ),
-            ),
-          ...admin.payments.map((p) => _paymentRow(app, admin, en, p)),
+            )
+          else
+            ...history.map((p) => _paymentRow(app, admin, en, p)),
         ],
       ),
     );
@@ -173,6 +215,17 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
             children: [
+              if (_showArchive)
+                Checkbox(
+                  value: _selected.contains(r.request.id),
+                  onChanged: (v) => setState(() {
+                    if (v == true) {
+                      _selected.add(r.request.id);
+                    } else {
+                      _selected.remove(r.request.id);
+                    }
+                  }),
+                ),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,6 +324,50 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
     }
   }
 
+  Future<void> _bulkDeleteArchived(AppProvider app, AdminProvider admin, bool en) async {
+    if (_selected.isEmpty) return;
+    final count = _selected.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(en ? 'Delete paid invoices' : 'حذف الفواتير المدفوعة'),
+        content: Text(en
+            ? 'Permanently delete $count fully paid invoice(s) and their payment records? This cannot be undone.'
+            : 'حذف نهائي لـ $count فاتورة مدفوعة بالكامل مع سجلات سدادها؟ لا يمكن التراجع عن هذا الإجراء.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(en ? 'Cancel' : 'إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: GossColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(en ? 'Delete' : 'حذف'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      for (final id in _selected) {
+        for (final p in admin.payments.where((p) => p.requestId == id)) {
+          await admin.deletePayment(app.token!, p.id);
+        }
+        await admin.deleteRequests(app.token!, [id]);
+      }
+      if (!mounted) return;
+      setState(() => _selected.clear());
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(en ? 'Invoices deleted.' : 'تم حذف الفواتير.'),
+        backgroundColor: GossColors.red,
+      ));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(en ? 'Unable to delete the invoices.' : 'تعذر حذف الفواتير.'),
+          backgroundColor: GossColors.red,
+        ));
+      }
+    }
+  }
+
   Future<void> _openInvoice(AppProvider app, AdminProvider admin, bool en, Receivable r) async {
     await showModalBottomSheet(
       context: context,
@@ -281,7 +378,7 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
         en: en,
         payments: admin.payments,
         onRecord: () async => _recordPayment(app, admin, en, r),
-        onDelete: (Payment p) => _deletePayment(app, admin, en, p),
+        onDelete: (Payment p) => _deletePayment(app, admin, en, p, fromSheet: true),
         fmt: _fmt,
       ),
     );
@@ -317,9 +414,12 @@ class _AccountingReceivablesScreenState extends State<AccountingReceivablesScree
     }
   }
 
-  Future<void> _deletePayment(AppProvider app, AdminProvider admin, bool en, Payment p) async {
+  Future<void> _deletePayment(AppProvider app, AdminProvider admin, bool en, Payment p,
+      {bool fromSheet = false}) async {
     if (!mounted) return;
-    Navigator.of(context).pop(); // close the sheet before showing the dialog
+    if (fromSheet) {
+      Navigator.of(context).pop(); // close the sheet before showing the dialog
+    }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -594,6 +694,45 @@ class _PaymentDialogState extends State<_PaymentDialog> {
           },
           child: Text(_en ? 'Save' : 'حفظ'),
         ),
+      ],
+    );
+  }
+}
+
+class _ArchiveToolbar extends StatelessWidget {
+  final bool en;
+  final int count;
+  final int selectedCount;
+  final bool allSelected;
+  final VoidCallback onToggleAll;
+  final VoidCallback onDelete;
+
+  const _ArchiveToolbar({
+    required this.en,
+    required this.count,
+    required this.selectedCount,
+    required this.allSelected,
+    required this.onToggleAll,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Checkbox(value: allSelected, onChanged: (_) => onToggleAll()),
+        Text(en ? 'Select all' : 'تحديد الكل'),
+        const Spacer(),
+        if (selectedCount > 0) ...[
+          Text('$selectedCount'),
+          const SizedBox(width: 8),
+          OutlinedButton.icon(
+            onPressed: onDelete,
+            style: OutlinedButton.styleFrom(foregroundColor: GossColors.red),
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: Text(en ? 'Delete' : 'حذف'),
+          ),
+        ],
       ],
     );
   }

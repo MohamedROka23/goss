@@ -4,7 +4,6 @@ import '../../providers/app_provider.dart';
 import '../../providers/admin_provider.dart';
 import '../../app/theme.dart';
 import '../../widgets/widgets.dart';
-import 'accounting/admin_accounting_tab.dart';
 
 class AdminProfitTab extends StatefulWidget {
   const AdminProfitTab({super.key});
@@ -72,23 +71,6 @@ class _AdminProfitTabState extends State<AdminProfitTab> {
           ],
         ),
         const SizedBox(height: 16),
-        GossButton(
-          label: en ? 'Open accounting reports' : 'افتح تقارير المحاسبة',
-          color: GossColors.navy,
-          icon: Icons.account_balance_outlined,
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => Scaffold(
-                body: SafeArea(
-                  child: AdminAccountingTab(
-                    onBack: () => Navigator.of(context).maybePop(),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),

@@ -144,26 +144,6 @@ class HttpBackend implements GossBackend {
   }
 
   @override
-  Future<void> registerAdmin(
-    String name,
-    String email,
-    String password,
-    String code,
-  ) async {
-    final res = await _client.post(
-      _uri('/api/register'),
-      headers: _headers(),
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-        'password': password,
-        'code': code,
-      }),
-    );
-    _check(res);
-  }
-
-  @override
   Future<List<ProductCategory>> fetchCategories() async {
     final res = await _client.get(_uri('/api/categories'));
     _check(res);
@@ -214,6 +194,9 @@ class HttpBackend implements GossBackend {
     final data = await _decode(res) as List;
     return data.map((e) => AdminUser.fromJson(e)).toList();
   }
+
+  @override
+  Stream<AdminUser?> watchOwnAdmin(String uid) => const Stream.empty();
 
   @override
   Future<void> registerAdminByAdmin(
@@ -402,6 +385,16 @@ class HttpBackend implements GossBackend {
       _uri('/api/requests/$id'),
       headers: _headers(token: token),
       body: jsonEncode({'archived': archived, '_admin': true}),
+    );
+    _check(res);
+  }
+
+  @override
+  Future<void> deleteRequestAdmin(String token, String id) async {
+    final res = await _client.delete(
+      _uri('/api/requests/$id'),
+      headers: _headers(token: token),
+      body: jsonEncode({'_admin': true}),
     );
     _check(res);
   }

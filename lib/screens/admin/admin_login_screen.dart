@@ -15,15 +15,11 @@ class AdminLoginScreen extends StatefulWidget {
 }
 
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
-  int _mode = 0; // 0 = sign in, 1 = register
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
-  final _codeCtrl = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
   String? _error;
-  String? _success;
 
   // Quick sign-in (الدخول السريع)
   bool _bioAvailable = false;
@@ -61,8 +57,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
-    _nameCtrl.dispose();
-    _codeCtrl.dispose();
     _qscCtrl.dispose();
     super.dispose();
   }
@@ -101,46 +95,16 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                   style: TextStyle(color: context.mutedColor, fontSize: 14),
                 ),
                 const SizedBox(height: 16),
-                SegmentedButton<int>(
-                  segments: [
-                    ButtonSegment(value: 0, label: Text(en ? 'Sign in' : 'تسجيل الدخول')),
-                    ButtonSegment(value: 1, label: Text(en ? 'Register' : 'تسجيل جديد')),
-                  ],
-                  selected: {_mode},
-                  onSelectionChanged: (s) {
-                    setState(() {
-                      _mode = s.first;
-                      _error = null;
-                      _success = null;
-                    });
-                  },
+                Text(
+                  en ? 'Sign in' : 'تسجيل الدخول',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: context.mutedColor, fontSize: 13),
                 ),
-                if (_mode == 0) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    en
-                        ? 'Your role is applied automatically from your account'
-                        : 'يتم تحديد دورك تلقائياً من الحساب',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: context.mutedColor, fontSize: 13),
-                  ),
-                ],
-                if (_mode == 0 && _enrolled) ...[
-                  const SizedBox(height: 16),
+                const SizedBox(height: 16),
+                if (_enrolled) ...[
                   _buildQuickSignInCard(app, en),
                 ],
                 const SizedBox(height: 16),
-                if (_mode == 1) ...[
-                  TextField(
-                    controller: _nameCtrl,
-                    textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
-                      hintText: en ? 'Full name' : 'الاسم الكامل',
-                      prefixIcon: const Icon(Icons.person_outline, color: GossColors.muted),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
                 TextField(
                   controller: _emailCtrl,
                   keyboardType: TextInputType.emailAddress,
@@ -164,61 +128,43 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     ),
                   ),
                 ),
-                if (_mode == 1) ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _codeCtrl,
-                    obscureText: true,
-                    onSubmitted: (_) => _submit(app, en),
-                    decoration: InputDecoration(
-                      hintText: en ? 'Admin registration code' : 'كود التسجيل الإداري',
-                      prefixIcon: const Icon(Icons.key, color: GossColors.muted),
-                    ),
+                const SizedBox(height: 2),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                  title: Text(
+                    en ? 'Remember email & password for quick sign-in' : 'تذكّر الأميل والباسورد للدخول السريع',
+                    style: const TextStyle(fontSize: 13),
                   ),
-                ],
-                if (_mode == 0) ...[
-                  const SizedBox(height: 2),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    dense: true,
-                    title: Text(
-                      en ? 'Remember email & password for quick sign-in' : 'تذكّر الأميل والباسورد للدخول السريع',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    value: _remember,
-                    onChanged: _loading ? null : (v) => setState(() => _remember = v ?? false),
-                  ),
-                ],
+                  value: _remember,
+                  onChanged: _loading ? null : (v) => setState(() => _remember = v ?? false),
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 20,
-                  child: _mode == 0
-                      ? Align(
-                          alignment: AlignmentDirectional.centerStart,
-                          child: TextButton(
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: const Size(0, 20),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            onPressed: _loading ? null : () => _openForgotPassword(app, en),
-                            child: Text(
-                              en ? 'Forgot password?' : 'نسيت كلمة المرور؟',
-                              style: const TextStyle(fontSize: 13, color: GossColors.blue),
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 20),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: _loading ? null : () => _openForgotPassword(app, en),
+                      child: Text(
+                        en ? 'Forgot password?' : 'نسيت كلمة المرور؟',
+                        style: const TextStyle(fontSize: 13, color: GossColors.blue),
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 14),
                 SizedBox(
                   width: double.infinity,
                   child: GossButton(
-                    label: en
-                        ? (_mode == 0 ? 'Sign in' : 'Create account & sign in')
-                        : (_mode == 0 ? 'دخول' : 'إنشاء حساب والدخول'),
-                    icon: _mode == 0 ? Icons.login : Icons.person_add_alt,
+                    label: en ? 'Sign in' : 'دخول',
+                    icon: Icons.login,
                     onPressed: _loading ? null : () => _submit(app, en),
                   ),
                 ),
@@ -228,24 +174,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     _error!,
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: GossColors.red, fontSize: 13),
-                  ),
-                ],
-                if (_success != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    _success!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: GossColors.green, fontSize: 13),
-                  ),
-                ],
-                if (_mode == 1) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    en
-                        ? 'The admin registration code is used to confirm new team members.'
-                        : 'يُستخدم كود التسجيل الإداري لتأكيد أعضاء الفريق الجدد.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: context.mutedColor, fontSize: 12),
                   ),
                 ],
               ],
@@ -262,29 +190,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     setState(() {
       _loading = true;
       _error = null;
-      _success = null;
     });
     if (email.isEmpty || password.isEmpty) {
       setState(() {
         _loading = false;
         _error = en ? 'Enter your email and password.' : 'أدخل البريد الإلكتروني وكلمة المرور.';
       });
-      return;
-    }
-    if (_mode == 1) {
-      final err = await app.registerAdmin(
-        name: _nameCtrl.text.trim().isEmpty ? email : _nameCtrl.text.trim(),
-        email: email,
-        password: password,
-        code: _codeCtrl.text.trim(),
-      );
-      if (!mounted) return;
-      setState(() => _loading = false);
-      if (err.isNotEmpty) {
-        setState(() => _error = err);
-      } else {
-        setState(() => _success = en ? 'Account created. Welcome!' : 'تم إنشاء الحساب. أهلاً بك!');
-      }
       return;
     }
     final navigator = Navigator.of(context);

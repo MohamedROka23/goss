@@ -132,8 +132,15 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
     final en = !app.isArabic;
     final allRequests = app.myRequests;
     final loading = app.myRequestsLoading;
-    final active = allRequests.where((r) => !r.archived).toList();
-    final archive = allRequests.where((r) => r.archived).toList();
+    // Completed orders leave the active list automatically (they are archived
+    // on the server once a terminal status is reached). The customer can still
+    // restore them from the archive like the admin.
+    final active = allRequests
+        .where((r) => !r.archived && !RequestStatus.isDone(r.status))
+        .toList();
+    final archive = allRequests
+        .where((r) => r.archived || RequestStatus.isDone(r.status))
+        .toList();
     final visible = _showArchive ? archive : active;
 
     return Scaffold(

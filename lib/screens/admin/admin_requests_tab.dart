@@ -27,6 +27,20 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
   DateTime? _filterDate;
   String? _updatingId;
   bool _showArchive = false;
+  final Set<String> _selected = {};
+
+  bool _allSelected(List<CustomerRequest> list) =>
+      list.isNotEmpty && list.every((r) => _selected.contains(r.id));
+
+  void _toggleAll(List<CustomerRequest> list) {
+    setState(() {
+      if (_allSelected(list)) {
+        _selected.removeAll(list.map((r) => r.id));
+      } else {
+        _selected.addAll(list.map((r) => r.id));
+      }
+    });
+  }
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -107,8 +121,34 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
               ),
             ],
             selected: {_showArchive},
-            onSelectionChanged: (s) => setState(() => _showArchive = s.first),
+            onSelectionChanged: (s) => setState(() {
+              _showArchive = s.first;
+              _selected.clear();
+            }),
           ),
+          if (_showArchive) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Checkbox(
+                  value: _allSelected(filtered),
+                  onChanged: (_) => _toggleAll(filtered),
+                ),
+                Text(en ? 'Select all' : 'تحديد الكل'),
+                const Spacer(),
+                if (_selected.isNotEmpty) ...[
+                  Text('${_selected.length}'),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _bulkDelete(app, admin, en),
+                    style: OutlinedButton.styleFrom(foregroundColor: GossColors.red),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: Text(en ? 'Delete' : 'حذف'),
+                  ),
+                ],
+              ],
+            ),
+          ],
           const SizedBox(height: 8),
           Row(
             children: [
@@ -144,12 +184,52 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
               style: TextStyle(color: context.mutedColor),
             ),
           ),
-        ...filtered.map((r) => _requestCard(context, app, admin, en, r)),
+        ...filtered.map((r) => _requestCard(context, app, admin, en, r,
+            showCheck: _showArchive,
+            selected: _selected.contains(r.id),
+            onToggle: () => setState(() {
+              if (_selected.contains(r.id)) {
+                _selected.remove(r.id);
+              } else {
+                _selected.add(r.id);
+              }
+            }))),
       ],
     );
   }
 
-  Widget _requestCard(BuildContext context, AppProvider app, AdminProvider admin, bool en, CustomerRequest r) {
+  Future<void> _bulkDelete(AppProvider app, AdminProvider admin, bool en) async {
+    if (_selected.isEmpty) return;
+    final ids = _selected.toList();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(en ? 'Delete requests' : 'حذف الطلبات'),
+        content: Text(en
+            ? 'Permanently delete ${ids.length} request(s) from the archive? This cannot be undone.'
+            : 'حذف نهائي لـ ${ids.length} طلباً من الأرشيف؟ لا يمكن التراجع عن هذا الإجراء.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(en ? 'Cancel' : 'إلغاء')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: GossColors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(en ? 'Delete' : 'حذف'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await admin.deleteRequests(app.token!, ids);
+    if (!mounted) return;
+    setState(() => _selected.clear());
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(en ? 'Requests deleted.' : 'تم حذف الطلبات.'),
+      backgroundColor: GossColors.red,
+    ));
+  }
+
+  Widget _requestCard(BuildContext context, AppProvider app, AdminProvider admin, bool en,
+      CustomerRequest r, {required bool showCheck, required bool selected, required VoidCallback onToggle}) {
     final date = r.createdAt;
     DateTime? parsed;
     try {
@@ -166,6 +246,8 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (showCheck)
+                  Checkbox(value: selected, onChanged: (_) => onToggle()),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

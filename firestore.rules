@@ -49,14 +49,14 @@ service cloud.firestore {
     }
 
     match /admins/{uid} {
-      allow read: if isAdmin();
-      // A brand-new user may create their OWN document ONLY as an unprivileged
-      // delegate (no role, no permissions, no register code). Real access is
-      // granted later by a super admin through the team panel.
-      allow create: if signedIn() &&
-        request.auth.uid == uid &&
-        request.resource.data.role == 'delegate' &&
-        request.resource.data.permissions == [];
+      // A member always reads their OWN document so role/permission changes
+      // made by the owner propagate to every signed-in device live; team
+      // admins may read the full list to manage accounts.
+      allow read: if isAdmin() ||
+        (signedIn() && uid == request.auth.uid);
+      // Self-registration is disabled: a brand-new auth account has NO /admins
+      // document, so it can never appear in the team panel. Real accounts are
+      // provisioned by a team member through the team panel only.
       // Team members with the admins (team) panel manage accounts exactly like
       // the HTTP server: they may create admin/delegate accounts but can never
       // mint a super admin or write the protected fields.
@@ -151,12 +151,13 @@ service cloud.firestore {
 
     match /chat_staff_keys/{uid} {
       // Public keys are public (needed so customers can seal a conversation to
-      // every support device). Any authenticated team member may enroll their
-      // device as a support endpoint — the chat PANEL visibility stays gated by
-      // the `chat` permission, but support devices must exist even when a
-      // member was provisioned before that permission was introduced.
+      // every support device). A device can only enroll as a SUPPORT endpoint
+      // while the account holds the `chat` permission — the permission is
+      // granted by the owner/admin through the team panel. Because every read /
+      // enrollment re-resolves the admin document live, revoking the permission
+      // cuts the device off immediately (until then the enrollment stays open).
       allow read: if signedIn();
-      allow create, update: if isAdmin() &&
+      allow create, update: if hasPerm('chat') &&
         uid == request.auth.uid &&
         request.resource.data.publicB64 is string &&
         request.resource.data.publicB64.size() <= 2048;
@@ -168,22 +169,20 @@ service cloud.firestore {
           request.resource.data.participants is list &&
           uid in request.resource.data.participants;
       }
-      function isParticipant() {
-        return signedIn() &&
-          resource.data.participants is list &&
-          request.auth.uid in resource.data.participants;
-      }
-      allow read: if isAdmin() || isParticipant();
+      allow read: if hasPerm('chat') ||
+        (signedIn() && request.auth.uid == resource.data.customerId);
       allow create: if requestedParticipant(request.auth.uid) &&
         request.resource.data.customerId == request.auth.uid &&
         request.resource.data.status == 'pending' &&
         request.resource.data.ephPubB64 is string &&
         request.resource.data.wrappedKeys is map;
-      // Team updates the lifecycle only; the customer identity and the sealed
-      // key boxes are immutable (created once, never re-wrapped). The guard is
-      // expressed over the *diff* between before/after, because for update() the
-      // result data contains every preserved field of the existing document.
-      allow update: if isAdmin() &&
+      // Team updates the lifecycle only when they still hold the `chat`
+      // permission (live-checked each request), so revoking it cuts the device
+      // off immediately. The customer identity and the sealed key boxes are
+      // immutable (created once, never re-wrapped). The guard is expressed over
+      // the *diff* between before/after, because for update() the result data
+      // contains every preserved field of the existing document.
+      allow update: if hasPerm('chat') &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'customerId', 'participants', 'wrappedKeys',
           'wrapNonces', 'wrapMacs', 'ephPubB64'
@@ -193,7 +192,8 @@ service cloud.firestore {
       // request), or RE-OPEN it after it was closed. They can never promote a
       // pending conversation to open by themselves — only a team member can.
       // Identity, key boxes, timestamps and the customer name stay immutable.
-      allow update: if isParticipant() &&
+      allow update: if signedIn() &&
+        request.auth.uid == resource.data.customerId &&
         request.resource.data.diff(resource.data)
             .affectedKeys().hasOnly(['status']) &&
         (request.resource.data.status == 'closed' ||
@@ -201,7 +201,7 @@ service cloud.firestore {
             resource.data.status == 'closed'));
       // Deleting a conversation (and its messages) is a team action. The
       // messages are protected by the subcollection rules below.
-      allow delete: if isAdmin();
+      allow delete: if hasPerm('chat');
     }
 
     match /chat_conversations/{id}/messages/{msgId} {
@@ -226,7 +226,7 @@ service cloud.firestore {
         (!('mediaData' in request.resource.data) ||
           (request.resource.data.mediaData is string &&
             request.resource.data.mediaData.size() <= 1048576));
-      allow update, delete: if isAdmin();
+      allow update, delete: if hasPerm('chat');
     }
 
     // Catch-all deny: any collection not listed above is inaccessible.

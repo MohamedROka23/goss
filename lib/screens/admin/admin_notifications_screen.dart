@@ -44,9 +44,10 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     final admin = context.watch<AdminProvider>();
     final en = !app.isArabic;
 
-    // New requests (status == 'new', newest first)
+    // New supply requests (status == 'new', newest first). Price quotes never
+    // appear as a list item: they arrive as a notification pop-up only.
     final newRequests = admin.requests
-        .where((r) => r.status == 'new')
+        .where((r) => r.status == 'new' && r.type != 'quote')
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 

@@ -675,7 +675,7 @@ const List<String> allPermissionKeys = [
 
 List<String> defaultPermissionsFor(String role) {
   if (role == AdminRole.delegate) {
-    return [AdminPerms.requests, AdminPerms.customers, AdminPerms.tracking];
+    return [AdminPerms.requests, AdminPerms.customers, AdminPerms.tracking, AdminPerms.chat];
   }
   return [...allPermissionKeys];
 }

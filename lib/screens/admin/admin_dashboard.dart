@@ -9,9 +9,7 @@ import '../../app/theme.dart';
 import '../../models/models.dart';
 import '../../services/notification_watcher.dart';
 import 'admin_quotes_tab.dart';
-import 'admin_price_quotes_tab.dart';
 import 'admin_purchases_tab.dart';
-import 'admin_profit_tab.dart';
 import 'admin_requests_tab.dart';
 import 'admin_team_tab.dart';
 import 'admin_customers_tab.dart';
@@ -71,12 +69,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     final tabs = <(String, _Tab, Widget)>[
       (AdminPerms.requests, _Tab(title: en ? 'Requests' : '\u0627\u0644\u0637\u0644\u0628\u0627\u062a', icon: Icons.inbox_outlined), const AdminRequestsTab()),
-      (AdminPerms.requests, _Tab(title: en ? 'Price Quotes' : '\u0639\u0631\u0648\u0636 \u0627\u0644\u0623\u0633\u0639\u0627\u0631', icon: Icons.request_quote_outlined), const AdminPriceQuotesTab()),
       (AdminPerms.tracking, _Tab(title: en ? 'Tracking' : '\u0627\u0644\u062a\u0631\u0627\u0643\u0646\u062c \u0623\u0648\u0631\u062f\u0631', icon: Icons.route_outlined), const AdminTrackingTab()),
       (AdminPerms.customers, _Tab(title: en ? 'Customers' : '\u0627\u0644\u0639\u0645\u0644\u0627\u0621', icon: Icons.people_outline), const AdminCustomersTab()),
-      (AdminPerms.quotes, _Tab(title: en ? 'Quotes' : '\u0639\u0631\u0648\u0636', icon: Icons.storefront_outlined), const AdminQuotesTab()),
+      (AdminPerms.quotes, _Tab(title: en ? 'Products' : '\u0627\u0644\u0645\u0646\u062a\u062c\u0627\u062a', icon: Icons.storefront_outlined), const AdminQuotesTab()),
       (AdminPerms.purchases, _Tab(title: en ? 'Purchasing' : '\u0627\u0644\u0634\u0631\u0627\u0621', icon: Icons.shopping_cart_outlined), const AdminPurchasesTab()),
-      (AdminPerms.profit, _Tab(title: en ? 'Profit' : '\u0627\u0644\u0631\u0628\u062d', icon: Icons.trending_up), const AdminProfitTab()),
       (AdminPerms.accounting, _Tab(title: en ? 'Accounting' : '\u0627\u0644\u0645\u062d\u0627\u0633\u0628\u0629', icon: Icons.account_balance_outlined), AdminAccountingTab(onBack: () => _select(0, null))),
       (AdminPerms.team, _Tab(title: en ? 'Admins' : '\u0627\u0644\u0641\u0631\u064a\u0642', icon: Icons.group_outlined), const AdminTeamTab()),
       (AdminPerms.chat, _Tab(title: en ? 'Support' : '\u0627\u0644\u062f\u0639\u0645', icon: Icons.headset_mic_outlined), const AdminChatTab()),

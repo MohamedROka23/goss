@@ -31,7 +31,6 @@ abstract class GossBackend {
   /// member's role; the client must never trust a user-chosen role from the
   /// login screen.
   AdminUser? lastServerProfile();
-  Future<void> registerAdmin(String name, String email, String password, String code);
 
   /// True when [email] + [password] are valid on the server. Used to authorize
   /// enabling quick sign-in (الدخول السريع) without mutating the live session.
@@ -46,6 +45,10 @@ abstract class GossBackend {
   /// by [requestPasswordReset].
   Future<bool> resetPassword(String email, String code, String newPassword);
   Future<List<AdminUser>> fetchAdmins(String token);
+  /// Live stream of the signed-in member's OWN admin document, so role and
+  /// permission changes made by the owner on another device propagate to this
+  /// device in real time (Firestore mode). HTTP mode returns an empty stream.
+  Stream<AdminUser?> watchOwnAdmin(String uid);
   Future<void> registerAdminByAdmin(
     String token,
     String name,
@@ -81,6 +84,10 @@ abstract class GossBackend {
   Future<List<CustomerRequest>> fetchMyRequests(String customerId);
   Stream<List<CustomerRequest>> watchRequests({String token = ''});
   Future<void> updateRequestStatus(String token, String id, String status);
+
+  /// Permanent deletion of a request (admin only). Used to clean up a
+  /// customer's orders. Once gone the order cannot be restored.
+  Future<void> deleteRequestAdmin(String token, String id);
 
   /// Marks a price-quote as converted so it can never be converted twice.
   Future<void> markRequestConverted(String token, String id);

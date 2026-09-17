@@ -39,15 +39,6 @@ class ApiService {
     return jsonDecode(res.body)['token'];
   }
 
-  static Future<void> registerAdmin(String name, String email, String password, String code) async {
-    final res = await http.post(
-      Uri.parse('$baseUrl/api/register'),
-      headers: _headers(),
-      body: jsonEncode({'name': name, 'email': email, 'password': password, 'code': code}),
-    );
-    if (res.statusCode != 200 && res.statusCode != 201) throw Exception('Registration failed');
-  }
-
   static Future<void> changeAdminPassword(String email, String oldPassword, String newPassword) async {
     final res = await http.post(
       Uri.parse('$baseUrl/api/change-password'),

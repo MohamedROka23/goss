@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data' show Uint8List;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -33,19 +34,32 @@ class _AdminProductImportScreenState extends State<AdminProductImportScreen> {
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/GOSST-products-template.xlsx');
       await file.writeAsBytes(bytes, flush: true);
-      final xfile = XFile(file.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      final shareResult = await SharePlus.instance.share(
-        ShareParams(
-          files: [xfile],
-          fileNameOverrides: [xfile.name],
-        ),
-      );
-      if (shareResult.status == ShareResultStatus.dismissed && mounted) {
+
+      try {
+        final xfile = XFile(file.path, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        final shareResult = await SharePlus.instance.share(
+          ShareParams(
+            files: [xfile],
+            fileNameOverrides: [xfile.name],
+          ),
+        );
+        if (shareResult.status == ShareResultStatus.dismissed && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(en
+                ? 'Share sheet closed without selecting an app. Also saved to Downloads.'
+                : 'تم إغلاق نافذة المشاركة بدون اختيار تطبيق. تم الحفظ في التنزيلات أيضاً.'),
+            duration: const Duration(seconds: 3),
+          ));
+        }
+      } catch (e) {
+        // Share sheet unavailable (no mail/app handlers, restricted device):
+        // fall back to a direct save into Downloads so the admin always gets
+        // the file.
+        final saved = await _saveToDownloads(bytes, en);
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(en
-              ? 'Share sheet closed without selecting an app.'
-              : 'تم إغلاق نافذة المشاركة بدون اختيار تطبيق.'),
-          duration: const Duration(seconds: 2),
+          content: SelectableText(saved.message),
+          duration: const Duration(seconds: 6),
         ));
       }
     } catch (e) {
@@ -56,6 +70,29 @@ class _AdminProductImportScreenState extends State<AdminProductImportScreen> {
             : 'تعذر إنشاء القالب. ($e)'),
         backgroundColor: GossColors.red,
       ));
+    }
+  }
+
+  /// Saves the template directly into the public Downloads folder whenever the
+  /// share sheet cannot be used. On Android this relies on MediaStore; on iOS
+  /// it uses the app Documents directory which is reachable via the Files app.
+  Future<({bool ok, String message})> _saveToDownloads(Uint8List bytes, bool en) async {
+    try {
+      Directory? dl;
+      try {
+        dl = await getDownloadsDirectory();
+      } catch (_) {
+        dl = null;
+      }
+      if (dl == null) {
+        final docs = await getApplicationDocumentsDirectory();
+        dl = docs;
+      }
+      final out = File('${dl.path}/GOSST-products-template.xlsx');
+      await out.writeAsBytes(bytes, flush: true);
+      return (ok: true, message: en ? 'Template saved to ${out.path}' : 'تم حفظ القالب في: ${out.path}');
+    } catch (e) {
+      return (ok: false, message: en ? 'Could not save the template: $e' : 'تعذر حفظ القالب: $e');
     }
   }
 

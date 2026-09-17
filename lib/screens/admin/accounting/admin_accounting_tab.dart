@@ -3,6 +3,7 @@ import 'package:intl/intl.dart' show DateFormat;
 import 'package:provider/provider.dart';
 
 import '../../../app/theme.dart';
+import '../../../models/models.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/app_provider.dart';
 import '../../../services/accounting.dart';
@@ -217,15 +218,16 @@ _navCard(
             ),
           ),
         ),
-        _navCard(
+        if (app.can(AdminPerms.profit))
+          _navCard(
           context,
           en: en,
           icon: Icons.trending_up,
           color: GossColors.green,
           title: en ? 'Profit analysis' : '\u062a\u062d\u0644\u064a\u0644 \u0627\u0644\u0631\u0628\u062d',
           subtitle: en
-              ? 'Monthly profit vs targets and purchase spend.'
-              : '\u0627\u0644\u0631\u0628\u062d \u0627\u0644\u0634\u0647\u0631\u064a \u0645\u0642\u0627\u0631\u0646\u0627\u064b \u0628\u0627\u0644\u0623\u0647\u062f\u0627\u0641 \u0648\u0645\u0635\u0631\u0648\u0641\u0627\u062a \u0627\u0644\u0634\u0631\u0627\u0621.',
+              ? 'Manual calculator: pick products & quantities to compute margin.'
+              : 'حاسبة يدوية: اختر المنتجات والكميات لحساب الهامش.',
           onTap: () => _push(
             context,
             _ModulePage(
