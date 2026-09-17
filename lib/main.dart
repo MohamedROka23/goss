@@ -102,13 +102,16 @@ Future<void> _activateAppCheck() async {
     if (kReleaseMode) {
       // Play Integrity: requires Play Console SHA-1 linkage + enforcement
       // toggle in Firebase Console → App Check → Play Integrity.
+      // On Apple platforms deviceCheck is used (works on iOS 11+/macOS 11+).
       await FirebaseAppCheck.instance.activate(
         androidProvider: AndroidProvider.playIntegrity,
+        appleProvider: AppleProvider.deviceCheck,
       );
     } else {
-      // Debug builds: debug attestation provider (emulators + debug APKs).
+      // Debug builds: debug attestation provider (emulators + debug builds).
       await FirebaseAppCheck.instance.activate(
         androidProvider: AndroidProvider.debug,
+        appleProvider: AppleProvider.debug,
       );
     }
   } catch (e) {
