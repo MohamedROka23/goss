@@ -49,6 +49,12 @@ abstract class GossBackend {
   /// permission changes made by the owner on another device propagate to this
   /// device in real time (Firestore mode). HTTP mode returns an empty stream.
   Stream<AdminUser?> watchOwnAdmin(String uid);
+
+  /// Live team roster. A permission change, a demotion or a removal made by the
+  /// owner is reflected in the team panel on every other device as soon as it
+  /// lands — without a manual refresh. Members tombstoned as `revoked` are
+  /// filtered out.
+  Stream<List<AdminUser>> watchAdmins({String token = ''});
   Future<void> registerAdminByAdmin(
     String token,
     String name,
@@ -66,8 +72,17 @@ abstract class GossBackend {
     List<String>? permissions,
   });
 
-  /// Removes a team member (never the owner/super admin; enforced by the server).
-  Future<void> deleteAdmin(String token, String id);
+  /// Removes a team member (never the owner/super admin; enforced by the rules
+  /// and the server).
+  ///
+  /// Returns whether the Firebase Auth record was also closed, plus a warning to
+  /// surface when it was not. Firestore mode revokes the account by rewriting it
+  /// into a `revoked` tombstone (permissions gone immediately, e-mail reserved,
+  /// one-way) and additionally asks the server to disable/delete the Auth user.
+  Future<({bool authDeleted, String? warning})> deleteAdmin(
+    String token,
+    String id,
+  );
 
   // Price quote notifications
   Future<List<PriceUpdateNotification>> fetchNotifications();
@@ -76,12 +91,21 @@ abstract class GossBackend {
 
   // Categories (dynamic product sections)
   Future<List<ProductCategory>> fetchCategories();
+
+  /// Live categories, so a section added or renamed by the owner appears on the
+  /// customer catalogue (and in the admin editor) immediately.
+  Stream<List<ProductCategory>> watchCategories();
   Future<void> addCategory(String token, String id, String en, String ar);
 
   // Customer requests
   Future<CustomerRequest> submitRequest(Map<String, dynamic> payload);
   Future<List<CustomerRequest>> fetchRequests(String token);
   Future<List<CustomerRequest>> fetchMyRequests(String customerId);
+
+  /// Live view of ONE customer's own orders. Replaces the 5-second polling the
+  /// "my orders" screen used, so a status change made by the shop reaches the
+  /// customer as soon as the write lands.
+  Stream<List<CustomerRequest>> watchMyRequests(String customerId);
   Stream<List<CustomerRequest>> watchRequests({String token = ''});
   Future<void> updateRequestStatus(String token, String id, String status);
 
@@ -108,23 +132,27 @@ abstract class GossBackend {
 
   // Purchases
   Future<List<Purchase>> fetchPurchases(String token);
+  Stream<List<Purchase>> watchPurchases({String token = ''});
   Future<Purchase> savePurchase(String token, Map<String, dynamic> data);
   Future<Purchase> updatePurchase(String token, String id, Map<String, dynamic> data);
   Future<void> deletePurchase(String token, String id);
 
   // Expenses
   Future<List<Expense>> fetchExpenses(String token);
+  Stream<List<Expense>> watchExpenses({String token = ''});
   Future<Expense> saveExpense(String token, Map<String, dynamic> data);
   Future<Expense> updateExpense(String token, String id, Map<String, dynamic> data);
   Future<void> deleteExpense(String token, String id);
 
   // Accounting: double-entry journal
   Future<List<JournalEntry>> fetchJournal(String token);
+  Stream<List<JournalEntry>> watchJournal({String token = ''});
   Future<JournalEntry> saveJournalEntry(String token, Map<String, dynamic> data);
   Future<void> deleteJournalEntry(String token, String id);
 
   // Accounting: customer payments / receivables
   Future<List<Payment>> fetchPayments(String token);
+  Stream<List<Payment>> watchPayments({String token = ''});
   Future<Payment> savePayment(String token, Map<String, dynamic> data);
   Future<void> deletePayment(String token, String id);
 }

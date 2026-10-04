@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../providers/app_provider.dart';
 import '../../services/product_import.dart';
 
@@ -203,7 +204,7 @@ class _AdminProductImportScreenState extends State<AdminProductImportScreen> {
         title: Text(en ? 'Import products from Excel' : 'رفع المنتجات من Excel'),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(context.gap(16)),
         children: [
           Card(
             color: GossColors.navy,

@@ -8,7 +8,10 @@
     "dev:client": "vite",
     "dev:server": "node server/index.js",
     "build": "vite build",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "seed": "node server/seed_firestore.mjs",
+    "migrate:costs": "node server/migrate_product_costs.mjs",
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes,database"
   },
   "dependencies": {
     "cors": "^2.8.5",

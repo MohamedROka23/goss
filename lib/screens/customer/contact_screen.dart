@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../widgets/widgets.dart';
 
 class ContactScreen extends StatelessWidget {
@@ -26,7 +27,7 @@ class ContactScreen extends StatelessWidget {
             isArabic: !en,
           ),
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(context.gap(24)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -219,7 +220,7 @@ class ContactScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(context.gap(16)),
           child: Row(
             children: [
               Container(

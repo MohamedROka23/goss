@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -61,7 +62,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(context.gap(16)),
               itemCount: list.length,
               itemBuilder: (ctx, i) {
                 final n = list[i];

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
+import '../../app/motion.dart';
+import '../../services/biometric_service.dart';
 import '../../widgets/widgets.dart';
 import 'quick_sign_in_setup_sheet.dart';
 import 'forgot_password_sheet.dart';
@@ -23,6 +25,8 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   // Quick sign-in (الدخول السريع)
   bool _bioAvailable = false;
+  BiometricCapability _bioCapability = BiometricCapability.unavailable;
+  String _bioLabel = '';
   bool _enrolled = false;
   bool _remember = false;
   final _qscCtrl = TextEditingController();
@@ -38,15 +42,21 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   Future<void> _boot() async {
     final app = context.read<AppProvider>();
-    var bio = false;
-    try {
-      bio = await LocalAuthentication().canCheckBiometrics;
-    } catch (_) {}
+    final isArabic = app.isArabic;
+    // Probe the real device state rather than `canCheckBiometrics`, which
+    // reports true on a phone whose sensor exists but has nothing enrolled —
+    // that is what made the fingerprint button appear and then fail.
+    final capability = await app.refreshBiometrics();
     final enrolled = await app.quickSignInArmed();
     var email = enrolled ? await app.rememberedEmail() : null;
+    final label = capability == BiometricCapability.available
+        ? await app.biometricLabel(isArabic: isArabic)
+        : '';
     if (!mounted) return;
     setState(() {
-      _bioAvailable = bio;
+      _bioAvailable = capability == BiometricCapability.available;
+      _bioCapability = capability;
+      _bioLabel = label;
       _enrolled = enrolled;
       _remember = enrolled;
       if (email != null && email.trim().isNotEmpty) _emailCtrl.text = email.trim();
@@ -68,17 +78,27 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Image.asset('assets/logo.png', width: 72, height: 72),
-                const SizedBox(height: 12),
+        padding: EdgeInsets.all(24 * context.goss.density),
+        // A login form is a column of short fields: letting it span a 10"
+        // tablet makes the inputs absurdly wide and the card look empty, so
+        // the measure is capped and the card stays centred.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: FadeSlideIn(
+            child: Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              child: Padding(
+                padding: EdgeInsets.all(24 * context.goss.density),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Image.asset(
+                      'assets/logo.png',
+                      width: 72 * context.goss.density,
+                      height: 72 * context.goss.density,
+                    ),
+                    const SizedBox(height: 12),
                 Text(
                   en ? 'Gosst Admin' : 'إدارة جوست',
                   textAlign: TextAlign.center,
@@ -102,7 +122,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                 ),
                 const SizedBox(height: 16),
                 if (_enrolled) ...[
-                  _buildQuickSignInCard(app, en),
+                  FadeSwitcher(
+                    child: KeyedSubtree(
+                      key: ValueKey('quick-sign-in-$_enrolled'),
+                      child: _buildQuickSignInCard(app, en),
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 16),
                 TextField(
@@ -176,7 +201,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     style: const TextStyle(color: GossColors.red, fontSize: 13),
                   ),
                 ],
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -224,7 +251,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
 
   Widget _buildQuickSignInCard(AppProvider app, bool en) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(14 * context.goss.density),
       decoration: BoxDecoration(
         color: context.sectionColor,
         borderRadius: BorderRadius.circular(10),
@@ -256,8 +283,21 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             const SizedBox(height: 10),
             FilledButton.tonalIcon(
               icon: const Icon(Icons.fingerprint),
-              label: Text(en ? 'Sign in with fingerprint' : 'الدخول بالبصمة'),
+              label: Text(_bioLabel.isEmpty
+                  ? (en ? 'Sign in with fingerprint' : 'الدخول بالبصمة')
+                  : _bioLabel),
               onPressed: _loading ? null : () => _quickSignInByBio(app, en),
+            ),
+          ] else if (app.biometricHardwarePresent && !_qsLockedOut) ...[
+            // The sensor is present but unusable: say why, instead of silently
+            // hiding the option and leaving the user wondering.
+            const SizedBox(height: 10),
+            Text(
+              BiometricService.messageFor(_bioCapability, isArabic: !en) ??
+                  (en
+                      ? 'Biometrics are not available on this device.'
+                      : 'البصمة غير متوفرة على هذا الجهاز.'),
+              style: TextStyle(fontSize: 12, color: context.mutedColor),
             ),
           ],
           if (!_qsLockedOut) ...[
@@ -323,14 +363,15 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   }
 
   Future<void> _quickSignInByBio(AppProvider app, bool en) async {
-    try {
-      final ok = await LocalAuthentication().authenticate(
-        localizedReason: en ? 'Sign in to the admin panel' : 'الدخول إلى لوحة الأدمن',
-        persistAcrossBackgrounding: true,
-      );
-      if (!mounted || !ok) return;
-    } catch (_) {
-      if (mounted) setState(() => _qsError = en ? 'Biometrics unavailable.' : 'البصمة غير متاحة.');
+    // Never throws: a cancelled or unavailable prompt returns false and the
+    // passcode + password paths stay reachable.
+    final ok = await app.authenticateBiometric(isArabic: !en);
+    if (!mounted) return;
+    if (!ok) {
+      final reason = BiometricService.messageFor(app.biometricCapability, isArabic: !en);
+      if (reason != null && mounted) {
+        setState(() => _qsError = reason);
+      }
       return;
     }
     await _performQuickSignIn(en);

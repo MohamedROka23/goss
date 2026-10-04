@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import 'package:provider/provider.dart';
 
+import '../../../app/motion.dart';
+import '../../../app/responsive.dart';
 import '../../../app/theme.dart';
 import '../../../models/models.dart';
 import '../../../providers/admin_provider.dart';
@@ -53,208 +55,229 @@ class AdminAccountingTab extends StatelessWidget {
 
     final label = DateFormat(en ? 'MMM yyyy' : 'yyyy-MM').format(now);
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
+    // Centred and width-capped on tablets so the statement cards never stretch
+    // edge to edge; phones are untouched (maxContentWidth is infinite there).
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: context.goss.maxContentWidth),
+        child: ListView(
+          padding: EdgeInsets.all(context.goss.pagePadding),
           children: [
-            if (onBack != null) ...[
-              IconButton(
-                tooltip: en ? 'Back' : 'رجوع',
-                icon: const Icon(Icons.arrow_back),
-                onPressed: onBack,
+            FadeSlideIn(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      if (onBack != null) ...[
+                        IconButton(
+                          tooltip: en ? 'Back' : 'رجوع',
+                          icon: const Icon(Icons.arrow_back),
+                          onPressed: onBack,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          en ? 'Accounting' : 'المحاسبة',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.headingColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    en
+                        ? 'Automatic statements from orders, purchases, expenses and payments.'
+                        : 'قوائم مالية تلقائية من الطلبات والمشتريات والمصاريف والمدفوعات.',
+                    style: TextStyle(color: context.mutedColor),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // KPI tiles: stack vertically instead of overflowing when the
+                  // tile row cannot hold two money figures side by side.
+                  AdaptiveRow(
+                    spacing: context.gap(8),
+                    minChildWidth: 150,
+                    children: [
+                      _chip(
+                        label: en ? 'Net profit ($label)' : 'صافي الربح ($label)',
+                        value: monthIncome.netProfit,
+                        color: monthIncome.netProfit >= 0 ? GossColors.green : GossColors.red,
+                        en: en,
+                      ),
+                      _chip(
+                        label: en ? 'Outstanding' : 'ذمم مفتوحة',
+                        value: openAR,
+                        color: GossColors.navy,
+                        en: en,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  AdaptiveRow(
+                    spacing: context.gap(8),
+                    minChildWidth: 150,
+                    children: [
+                      _chip(
+                        label: en ? 'Collected' : 'مدفوعات محصلة',
+                        value: admin.totalPaymentsReceived,
+                        color: GossColors.blue,
+                        en: en,
+                      ),
+                      _chip(
+                        label: en ? 'Month expenses' : 'مصاريف الشهر',
+                        value: monthIncome.totalExpenses,
+                        color: GossColors.red,
+                        en: en,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+                  _navCard(
+                    context,
+                    en: en,
+                    icon: Icons.insert_chart_outlined,
+                    color: GossColors.green,
+                    title: en ? 'Income statement' : 'قائمة الدخل',
+                    subtitle: en
+                        ? 'Revenue, COGS, gross & net profit by period.'
+                        : 'الإيرادات وتكلفة المبيعات والربح الإجمالي والصافي حسب الفترة.',
+                    onTap: () => _push(context, const AccountingIncomeScreen()),
+                  ),
+                  _navCard(
+                    context,
+                    en: en,
+                    icon: Icons.receipt_long_outlined,
+                    color: GossColors.blue,
+                    title: en ? 'Receivables & payments' : 'الذمم والمدفوعات',
+                    subtitle: en
+                        ? 'Invoices per order, customer balances and recording payments.'
+                        : 'فواتير كل طلب وأرصدة العملاء وتسجيل السداد.',
+                    onTap: () => _push(context, const AccountingReceivablesScreen()),
+                  ),
+                  _navCard(
+                    context,
+                    en: en,
+                    icon: Icons.menu_book_outlined,
+                    color: GossColors.navy,
+                    title: en ? 'Journal & trial balance' : 'دفتر اليومية والميزان',
+                    subtitle: en
+                        ? 'Double-entry postings and the trial balance.'
+                        : 'القيود بقيد مزدوج وميزان المراجعة.',
+                    onTap: () => _push(context, const AccountingJournalScreen()),
+                  ),
+                  _navCard(
+                    context,
+                    en: en,
+                    icon: Icons.account_tree_outlined,
+                    color: Color(0xFF7B61FF),
+                    title: en ? 'General ledger' : 'دفتر الأستاذ العام',
+                    subtitle: en
+                        ? 'Per-account movements with opening & closing balances.'
+                        : 'حركة كل حساب مع أرصدة الفتح والختام.',
+                    onTap: () => _push(context, const AccountingLedgerScreen()),
+                  ),
+                  _navCard(
+                    context,
+                    en: en,
+                    icon: Icons.description_outlined,
+                    color: GossColors.red,
+                    title: en ? 'Monthly report' : 'التقرير الشهري',
+                    subtitle: en
+                        ? 'Full PDF / Excel report for a chosen month.'
+                        : 'تقرير شامل PDF / Excel للشهر محدد.',
+                    onTap: () => _push(context, const AccountingReportScreen()),
+                  ),
+
+                  const SizedBox(height: 16),
+                  Text(
+                    en ? 'Daily operations' : 'عمليات اليوم',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.mutedColor),
+                  ),
+                  const SizedBox(height: 8),
+                  _navCard(
+                    context,
+                    en: en,
+                    icon: Icons.shopping_cart_outlined,
+                    color: const Color(0xFF00897B),
+                    title: en ? 'Purchasing' : 'المشتريات',
+                    subtitle: en
+                        ? 'Record purchase invoices with quantities, costs and VAT.'
+                        : 'تسجيل فواتير الشراء بالكميات والتكلفة والضريبة.',
+                    onTap: () => _push(
+                      context,
+                      _ModulePage(
+                        en: en,
+                        title: en ? 'Purchasing' : 'المشتريات',
+                        child: const AdminPurchasesTab(),
+                      ),
+                    ),
+                  ),
+                  _navCard(
+                    context,
+                    en: en,
+                    icon: Icons.payments_outlined,
+                    color: const Color(0xFFEF6C00),
+                    title: en ? 'Expenses' : 'المصاريف',
+                    subtitle: en
+                        ? 'Track and categorise day-to-day business expenses.'
+                        : 'متابعة وتصنيف مصاريف العمل اليومية.',
+                    onTap: () => _push(
+                      context,
+                      _ModulePage(
+                        en: en,
+                        title: en ? 'Expenses' : 'المصاريف',
+                        child: const AdminExpensesTab(),
+                      ),
+                    ),
+                  ),
+                  if (app.can(AdminPerms.profit))
+                    _navCard(
+                      context,
+                      en: en,
+                      icon: Icons.trending_up,
+                      color: GossColors.green,
+                      title: en ? 'Profit analysis' : 'تحليل الربح',
+                      subtitle: en
+                          ? 'Manual calculator: pick products & quantities to compute margin.'
+                          : 'حاسبة يدوية: اختر المنتجات والكميات لحساب الهامش.',
+                      onTap: () => _push(
+                        context,
+                        _ModulePage(
+                          en: en,
+                          title: en ? 'Profit analysis' : 'تحليل الربح',
+                          child: const AdminProfitTab(),
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 12),
+                  // Export pills scale down rather than overflowing a narrow
+                  // column; at full width they render exactly as before.
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: ExportButtons(
+                        title: 'GOSST ${en ? 'Accounting snapshot $label' : 'ملخص المحاسبة $label'}',
+                        headers: [en ? 'Item' : 'البند', en ? 'Amount (EGP)' : 'المبلغ (ج.م)'],
+                        rows: [
+                          [en ? 'Net profit ($label)' : 'صافي الربح ($label)', monthIncome.netProfit.toStringAsFixed(2)],
+                          [en ? 'Outstanding receivables' : 'ذمم مفتوحة', openAR.toStringAsFixed(2)],
+                          [en ? 'Collected payments' : 'مدفوعات محصلة', admin.totalPaymentsReceived.toStringAsFixed(2)],
+                          [en ? 'Month expenses' : 'مصاريف الشهر', monthIncome.totalExpenses.toStringAsFixed(2)],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 4),
-            ],
-            Expanded(
-              child: Text(
-                en ? 'Accounting' : 'المحاسبة',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.headingColor),
-              ),
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          en
-              ? 'Automatic statements from orders, purchases, expenses and payments.'
-              : 'قوائم مالية تلقائية من الطلبات والمشتريات والمصاريف والمدفوعات.',
-          style: TextStyle(color: context.mutedColor),
-        ),
-        const SizedBox(height: 16),
-
-        Row(
-          children: [
-            Expanded(child: _chip(
-              label: en ? 'Net profit ($label)' : 'صافي الربح ($label)',
-              value: monthIncome.netProfit,
-              color: monthIncome.netProfit >= 0 ? GossColors.green : GossColors.red,
-              en: en,
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: _chip(
-              label: en ? 'Outstanding' : 'ذمم مفتوحة',
-              value: openAR,
-              color: GossColors.navy,
-              en: en,
-            )),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(child: _chip(
-              label: en ? 'Collected' : 'مدفوعات محصلة',
-              value: admin.totalPaymentsReceived,
-              color: GossColors.blue,
-              en: en,
-            )),
-            const SizedBox(width: 8),
-            Expanded(child: _chip(
-              label: en ? 'Month expenses' : 'مصاريف الشهر',
-              value: monthIncome.totalExpenses,
-              color: GossColors.red,
-              en: en,
-            )),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-        _navCard(
-          context,
-          en: en,
-          icon: Icons.insert_chart_outlined,
-          color: GossColors.green,
-          title: en ? 'Income statement' : 'قائمة الدخل',
-          subtitle: en
-              ? 'Revenue, COGS, gross & net profit by period.'
-              : 'الإيرادات وتكلفة المبيعات والربح الإجمالي والصافي حسب الفترة.',
-          onTap: () => _push(context, const AccountingIncomeScreen()),
-        ),
-        _navCard(
-          context,
-          en: en,
-          icon: Icons.receipt_long_outlined,
-          color: GossColors.blue,
-          title: en ? 'Receivables & payments' : 'الذمم والمدفوعات',
-          subtitle: en
-              ? 'Invoices per order, customer balances and recording payments.'
-              : 'فواتير كل طلب وأرصدة العملاء وتسجيل السداد.',
-          onTap: () => _push(context, const AccountingReceivablesScreen()),
-        ),
-        _navCard(
-          context,
-          en: en,
-          icon: Icons.menu_book_outlined,
-          color: GossColors.navy,
-          title: en ? 'Journal & trial balance' : 'دفتر اليومية والميزان',
-          subtitle: en
-              ? 'Double-entry postings and the trial balance.'
-              : 'القيود بقيد مزدوج وميزان المراجعة.',
-          onTap: () => _push(context, const AccountingJournalScreen()),
-        ),
-        _navCard(
-          context,
-          en: en,
-          icon: Icons.account_tree_outlined,
-          color: Color(0xFF7B61FF),
-          title: en ? 'General ledger' : 'دفتر الأستاذ العام',
-          subtitle: en
-              ? 'Per-account movements with opening & closing balances.'
-              : 'حركة كل حساب مع أرصدة الفتح والختام.',
-          onTap: () => _push(context, const AccountingLedgerScreen()),
-        ),
-_navCard(
-          context,
-          en: en,
-          icon: Icons.description_outlined,
-          color: GossColors.red,
-          title: en ? 'Monthly report' : '\u0627\u0644\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0634\u0647\u0631\u064a',
-          subtitle: en
-              ? 'Full PDF / Excel report for a chosen month.'
-              : '\u062a\u0642\u0631\u064a\u0631 \u0634\u0627\u0645\u0644 PDF / Excel \u0644\u0634\u0647\u0631 \u0645\u062d\u062f\u062f.',
-          onTap: () => _push(context, const AccountingReportScreen()),
-        ),
-
-        const SizedBox(height: 16),
-        Text(
-          en ? 'Daily operations' : '\u0639\u0645\u0644\u064a\u0627\u062a \u0627\u0644\u064a\u0648\u0645',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.mutedColor),
-        ),
-        const SizedBox(height: 8),
-        _navCard(
-          context,
-          en: en,
-          icon: Icons.shopping_cart_outlined,
-          color: const Color(0xFF00897B),
-          title: en ? 'Purchasing' : '\u0627\u0644\u0645\u0634\u062a\u0631\u064a\u0627\u062a',
-          subtitle: en
-              ? 'Record purchase invoices with quantities, costs and VAT.'
-              : '\u062a\u0633\u062c\u064a\u0644 \u0641\u0648\u0627\u062a\u064a\u0631 \u0627\u0644\u0634\u0631\u0627\u0621 \u0628\u0627\u0644\u0643\u0645\u064a\u0627\u062a \u0648\u0627\u0644\u062a\u0643\u0644\u0641\u0629 \u0648\u0627\u0644\u0636\u0631\u064a\u0628\u0629.',
-          onTap: () => _push(
-            context,
-            _ModulePage(
-              en: en,
-              title: en ? 'Purchasing' : '\u0627\u0644\u0645\u0634\u062a\u0631\u064a\u0627\u062a',
-              child: const AdminPurchasesTab(),
-            ),
-          ),
-        ),
-        _navCard(
-          context,
-          en: en,
-          icon: Icons.payments_outlined,
-          color: const Color(0xFFEF6C00),
-          title: en ? 'Expenses' : '\u0627\u0644\u0645\u0635\u0627\u0631\u064a\u0641',
-          subtitle: en
-              ? 'Track and categorise day-to-day business expenses.'
-              : '\u0645\u062a\u0627\u0628\u0639\u0629 \u0648\u062a\u0635\u0646\u064a\u0641 \u0645\u0635\u0627\u0631\u064a\u0641 \u0627\u0644\u0639\u0645\u0644 \u0627\u0644\u064a\u0648\u0645\u064a\u0629.',
-          onTap: () => _push(
-            context,
-            _ModulePage(
-              en: en,
-              title: en ? 'Expenses' : '\u0627\u0644\u0645\u0635\u0627\u0631\u064a\u0641',
-              child: const AdminExpensesTab(),
-            ),
-          ),
-        ),
-        if (app.can(AdminPerms.profit))
-          _navCard(
-          context,
-          en: en,
-          icon: Icons.trending_up,
-          color: GossColors.green,
-          title: en ? 'Profit analysis' : '\u062a\u062d\u0644\u064a\u0644 \u0627\u0644\u0631\u0628\u062d',
-          subtitle: en
-              ? 'Manual calculator: pick products & quantities to compute margin.'
-              : 'حاسبة يدوية: اختر المنتجات والكميات لحساب الهامش.',
-          onTap: () => _push(
-            context,
-            _ModulePage(
-              en: en,
-              title: en ? 'Profit analysis' : '\u062a\u062d\u0644\u064a\u0644 \u0627\u0644\u0631\u0628\u062d',
-              child: const AdminProfitTab(),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            ExportButtons(
-              title: 'GOSST ${en ? 'Accounting snapshot $label' : 'ملخص المحاسبة $label'}',
-              headers: [en ? 'Item' : 'البند', en ? 'Amount (EGP)' : 'المبلغ (ج.م)'],
-              rows: [
-                [en ? 'Net profit ($label)' : 'صافي الربح ($label)', monthIncome.netProfit.toStringAsFixed(2)],
-                [en ? 'Outstanding receivables' : 'ذمم مفتوحة', openAR.toStringAsFixed(2)],
-                [en ? 'Collected payments' : 'مدفوعات محصلة', admin.totalPaymentsReceived.toStringAsFixed(2)],
-                [en ? 'Month expenses' : 'مصاريف الشهر', monthIncome.totalExpenses.toStringAsFixed(2)],
-              ],
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 
@@ -270,13 +293,32 @@ _navCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label,
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            FlexibleText(
+              label,
+              maxLines: 1,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
             const SizedBox(height: 6),
-            Text('${en ? 'EGP' : 'ج.م'} ${value.toStringAsFixed(2)}',
+            // Money figures animate on change and shrink instead of
+            // overflowing when a stacked/narrow tile cannot fit the number.
+            // No Flexible/Flex here: the tile Column is inside a Card with an
+            // unbounded height, so any flex child would throw.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Directionality(
                 textDirection: TextDirection.ltr,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
+                child: AnimatedCount(
+                  value: value,
+                  prefix: '${en ? 'EGP' : 'ج.م'} ',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -292,10 +334,9 @@ _navCard(
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(4),
-        onTap: onTap,
+    return LiftCard(
+      onTap: onTap,
+      child: Card(
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
@@ -316,9 +357,11 @@ _navCard(
                   children: [
                     Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 3),
-                    Text(subtitle,
-                        maxLines: 2, overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: context.mutedColor)),
+                    FlexibleText(
+                      subtitle,
+                      maxLines: 2,
+                      style: TextStyle(fontSize: 12, color: context.mutedColor),
+                    ),
                   ],
                 ),
               ),
@@ -352,7 +395,12 @@ class _ModulePage extends StatelessWidget {
           onPressed: () => Navigator.of(context).maybePop(),
         ),
       ),
-      body: SafeArea(child: child),
+      body: SafeArea(child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: context.goss.maxContentWidth),
+          child: child,
+        ),
+      )),
     );
   }
 }

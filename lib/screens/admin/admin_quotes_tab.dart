@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
+import '../../app/motion.dart';
+import '../../widgets/icon_3d.dart';
 import '../../models/models.dart';
 import '../../services/backend_manager.dart';
 import '../../services/api_service.dart';
@@ -29,7 +32,16 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
   final _stock = TextEditingController();
   String _category = '';
   String? _editId;
-  String _unitChoice = 'كيلو';
+
+  /// Unit options, declared once as the single source of truth so the dropdown
+  /// items and the default selection can never drift apart. A mismatch makes
+  /// DropdownButton throw an uncatchable assertion that paints a red error
+  /// screen over the entire products page.
+  static const List<String> _unitOptions = ['قطعة', 'كيلو', 'كرتون'];
+
+  /// Derived from the list rather than typed out, so the default is always a
+  /// member of [_unitOptions].
+  String _unitChoice = _unitOptions[1];
   bool _saving = false;
   Timer? _nameTimer;
   Timer? _descTimer;
@@ -89,7 +101,7 @@ class _AdminQuotesTabState extends State<AdminQuotesTab> {
 
     return ListView(
       controller: _scroll,
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(context.gap(16)),
       children: [
         Row(
           children: [
@@ -298,10 +310,17 @@ Wrap(
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     key: ValueKey('unitpick-$_unitChoice'),
-                    initialValue: _unitChoice,
+                    // Never hand the dropdown a value outside its own items:
+                    // DropdownButton asserts on that and the assertion is not
+                    // catchable, so it paints a red error screen over the whole
+                    // page. Falling back to a known member is the only safe way
+                    // to render.
+                    initialValue: _unitOptions.contains(_unitChoice)
+                        ? _unitChoice
+                        : _unitOptions[1],
                     isExpanded: true,
                     decoration: InputDecoration(labelText: en ? 'Unit type' : '\u0646\u0648\u0639 \u0627\u0644\u0648\u062d\u062f\u0629'),
-                    items: const ['\u0642\u0637\u0639\u0629', '\u0643\u064a\u0644\u0648', '\u0643\u0631\u062a\u0648\u0646']
+                    items: _unitOptions
                         .map((u) => DropdownMenuItem(value: u, child: Text(u, maxLines: 1, overflow: TextOverflow.ellipsis)))
                         .toList(),
                     onChanged: (v) => setState(() {
@@ -458,7 +477,9 @@ Wrap(
                 _descEnFor = p.descAr;
                 _unit.text = p.unit;
                 const unitMap = {'kg': '\u0643\u064a\u0644\u0648', 'piece': '\u0642\u0637\u0639\u0629', 'carton': '\u0643\u0631\u062a\u0648\u0646'};
-                _unitChoice = unitMap[p.unit] ?? '\u0643\u064a\u0644\u0648';
+                final mapped = unitMap[p.unit];
+                _unitChoice =
+                    (_unitOptions.contains(mapped) ? mapped : null) ?? _unitOptions[1];
                 _price.text = p.price.toString();
                 _costPrice.text = p.costPrice.toString();
                 _stock.text = p.stock.toStringAsFixed(0);
@@ -523,7 +544,7 @@ Wrap(
     _descEn.clear();
     _descAr.clear();
     _unit.clear();
-    _unitChoice = 'كيلو';
+    _unitChoice = _unitOptions[1];
     _nameEnFor = '';
     _descEnFor = '';
     _price.clear();

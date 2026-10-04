@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../services/backend.dart';
 import '../services/backend_manager.dart';
+import '../services/biometric_service.dart';
 import '../services/firestore_backend.dart';
 import '../services/fcm_service.dart';
 import '../services/secure_store.dart';
@@ -95,6 +96,11 @@ class AppProvider extends ChangeNotifier {
 
   /// Persists the settings with the (hashed) PIN. Pass [bio] to also offer a
   /// biometric prompt on this device.
+  ///
+  /// The PIN verifier is written ONLY to the secure store. An earlier version
+  /// also mirrored the hash into plain SharedPreferences, which contradicted the
+  /// invariant in secure_store.dart and exposed the verifier to anything that
+  /// can read an app backup.
   Future<void> enableQuickLock({required bool bio, required String pin}) async {
     _quickLockEnabled = true;
     _quickLockBio = bio;
@@ -103,7 +109,8 @@ class AppProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('goss-quicklock', true);
     await prefs.setBool('goss-quicklock-bio', bio);
-    await prefs.setString('goss-quicklock-pin', _quickLockPinHash);
+    // Remove any verifier a previous build left in plain preferences.
+    await prefs.remove('goss-quicklock-pin');
     await prefs.setBool('goss-quicklock-locked', false);
     await SecureStore.writeQuickLockPinHash(_quickLockPinHash);
     notifyListeners();
@@ -137,6 +144,15 @@ class AppProvider extends ChangeNotifier {
 
   bool _quickSignInBio = false;
   bool get quickSignInBio => _quickSignInBio;
+
+  /// Live biometric capability for this device.
+  ///
+  /// Exposed as a single enum instead of several booleans so a screen cannot
+  /// offer the fingerprint button on a device whose sensor has nothing
+  /// enrolled, which is what used to make the button appear and then fail.
+  BiometricCapability get biometricCapability => biometrics.capability;
+  bool get biometricReady => biometrics.canPrompt;
+  bool get biometricHardwarePresent => biometrics.hasHardware;
 
   String _quickSignInRole = '';
   String get quickSignInRole => _quickSignInRole;
@@ -197,6 +213,44 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Re-reads the device biometric state.
+  ///
+  /// Call after a successful prompt (the user may have just enrolled a
+  /// fingerprint from the system settings sheet that the prompt sent them to)
+  /// and whenever a screen is about to show a biometric option. If the user
+  /// has since enrolled something, the saved "use biometrics" preference is
+  /// re-enabled automatically — otherwise a device that was enrolled after
+  /// first setup would stay locked out of the feature forever.
+  Future<BiometricCapability> refreshBiometrics() async {
+    final capability = await biometrics.probe();
+    if (capability == BiometricCapability.available && !_quickSignInBio) {
+      await setQuickSignInBio(true);
+    } else if (capability != BiometricCapability.available && _quickSignInBio) {
+      // The sensor is gone or nothing is enrolled: turn the preference off so
+      // the UI does not keep offering a prompt that cannot succeed.
+      await setQuickSignInBio(false);
+    } else {
+      notifyListeners();
+    }
+    return capability;
+  }
+
+  /// Runs a biometric prompt with the app's own localized reason.
+  /// Never throws: on any failure it returns false and refreshes [biometricCapability].
+  Future<bool> authenticateBiometric({required bool isArabic}) async {
+    final ok = await biometrics.authenticate(
+      reason: isArabic
+          ? 'الدخول إلى لوحة الأدمن'
+          : 'Sign in to the admin panel',
+    );
+    if (!ok) await refreshBiometrics();
+    return ok;
+  }
+
+  /// Label for the biometric button, matching the enrolled modality.
+  Future<String> biometricLabel({required bool isArabic}) =>
+      biometrics.label(isArabic: isArabic);
+
   Future<void> disarmQuickSignIn() async {
     await SecureStore.clear();
     _quickSignInEnabled = false;
@@ -255,6 +309,9 @@ class AppProvider extends ChangeNotifier {
 
   StreamSubscription<List<Product>>? _productSub;
   StreamSubscription<List<PriceUpdateNotification>>? _notifSub;
+  StreamSubscription<List<ProductCategory>>? _catSub;
+  StreamSubscription<List<AdminUser>>? _adminsSub;
+  StreamSubscription<List<CustomerRequest>>? _myReqSub;
   StreamSubscription<AdminUser?>? _adminSub;
   List<PriceUpdateNotification> _notifs = [];
   List<PriceUpdateNotification> get notifications => _notifs;
@@ -270,6 +327,9 @@ class AppProvider extends ChangeNotifier {
     _connectivityTimer?.cancel();
     _productSub?.cancel();
     _notifSub?.cancel();
+    _catSub?.cancel();
+    _adminsSub?.cancel();
+    _myReqSub?.cancel();
     super.dispose();
   }
 
@@ -310,6 +370,9 @@ class AppProvider extends ChangeNotifier {
     _quickLocked = _quickLockEnabled && (prefs.getBool('goss-quicklock-locked') ?? false);
     _quickSignInEnabled = prefs.getBool(_qsEnabledKey) ?? false;
     _quickSignInBio = prefs.getBool(_qsBioKey) ?? false;
+    // The saved preference is a cache of what worked before; the live device
+    // state decides what to offer, so probe once at startup and reconcile.
+    unawaited(refreshBiometrics());
     _quickSignInRole = prefs.getString(_qsRoleKey) ?? '';
     final savedRole = prefs.getString('goss-admin-role') ?? '';
     _activeRole = (savedRole == AdminRole.delegate || savedRole == AdminRole.admin) ? savedRole : null;
@@ -405,6 +468,60 @@ class AppProvider extends ChangeNotifier {
       _categories = list;
       notifyListeners();
     } catch (_) {}
+  }
+
+  /// Live categories. A section added or renamed by the owner reaches the
+  /// customer catalogue and the admin editor as soon as the write commits,
+  /// without a pull-to-refresh. The first event also serves as the initial
+  /// load, so this supersedes the periodic reload the category editor used.
+  Future<void> watchCategories() async {
+    try {
+      final backend = await BackendManager.resolve();
+      await _catSub?.cancel();
+      _catSub = backend.watchCategories().listen((list) {
+        if (_disposed) return;
+        _categories = list;
+        notifyListeners();
+      });
+    } catch (_) {}
+  }
+
+  /// Live team roster, so a permission change, demotion or removal made on
+  /// another device shows up in the team panel immediately.
+  Future<void> watchAdmins() async {
+    if (_token == null) return;
+    try {
+      final backend = await BackendManager.resolve();
+      await _adminsSub?.cancel();
+      _adminsSub = backend.watchAdmins(token: _token!).listen((list) {
+        if (_disposed) return;
+        _admins = list;
+        notifyListeners();
+        // A change to any member can revoke or shrink this account's own
+        // access, so re-resolve against the fresh roster.
+        unawaited(resolveCurrentAdmin());
+      });
+    } catch (_) {}
+  }
+
+  /// Live view of the signed-in customer's own orders. Replaces the 5-second
+  /// poll in the "my orders" screen, so a status change made by the shop (or a
+  /// new order placed from another device) lands immediately.
+  Future<void> watchMyRequests() async {
+    try {
+      final id = await BackendManager.customerId();
+      final backend = await BackendManager.resolve();
+      await _myReqSub?.cancel();
+      _myReqSub = backend.watchMyRequests(id).listen((list) {
+        if (_disposed) return;
+        _myRequests = list;
+        _myRequestsLoading = false;
+        notifyListeners();
+      });
+    } catch (_) {
+      _myRequestsLoading = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
   Future<String> addCategory({
@@ -640,37 +757,51 @@ class AppProvider extends ChangeNotifier {
   String get adminEmail => _adminEmail;
   String _adminEmail = '';
 
-  static const _masterAdminUids = {'Lt3KI3MAoIgnK1tt028suzJJDlq1'};
-
   AdminUser? _currentAdmin;
   AdminUser? get currentAdmin => _currentAdmin;
   List<String>? _cachedPermissions;
   String? _activeRole;
 
-  bool get isOwner {
-    final a = _currentAdmin;
-    if (a != null) {
-      return a.role == AdminRole.super_ || _masterAdminUids.contains(a.id);
-    }
-    // Cold start / legacy master-password session: the saved permission set
-    // already includes the team panel, so treat it as the owner.
-    return _cachedPermissions != null && _cachedPermissions!.contains(AdminPerms.team);
-  }
+  /// Whether the signed-in member holds the owner role.
+  ///
+  /// Derived ONLY from the live team record. The previous version fell back to
+  /// the cached permission list, which meant that if the team list failed to
+  /// load (offline, permission-denied, cold start) any member whose cache
+  /// contained `team` was treated as the owner and `can()` answered true for
+  /// every panel. Owner status is a server-side fact; a cache is never evidence.
+  ///
+  /// The compiled-in uid list is intentionally no longer an authorization input.
+  /// It cannot be revoked, so the owner's owner-rights were unrevocable from any
+  /// other device; the `/admins` document is the single source of truth.
+  bool get isOwner => _currentAdmin?.role == AdminRole.super_;
 
   /// Effective permissions of the logged-in team member.
+  ///
+  /// Precedence: the live profile, then the last known cached set, then the
+  /// default for the role. The cache is a display convenience only — it is
+  /// never treated as proof of ownership (see [isOwner]), and a *named* login
+  /// that no longer resolves to any team member is denied outright rather than
+  /// falling back, because that is exactly the revoked case.
   List<String> get permissions {
-    if (isOwner) return allPermissionKeys;
-    // A named login that no longer resolves to any team member is treated as
-    // having zero permissions (never escalates to the full admin set).
-    if (_currentAdmin == null && _adminEmail.isNotEmpty) {
+    final a = _currentAdmin;
+    if (a == null && _adminEmail.isNotEmpty) {
+      // Signed in with an address that is not (or no longer) a team member:
+      // revoked or deleted. No panels, no fallback.
       return const [];
     }
-    final granted = _currentAdmin?.permissions.isNotEmpty == true
-        ? _currentAdmin!.permissions
-        : (_cachedPermissions?.isNotEmpty == true ? _cachedPermissions! : defaultPermissionsFor(_currentAdmin?.role ?? AdminRole.admin));
-    // If the member signed in under a delegate role, limit them to the
-    // delegate panels (never escalates beyond what the owner granted).
-    if (_activeRole == AdminRole.delegate) {
+    if (a != null) {
+      if (a.role == AdminRole.super_) return allPermissionKeys;
+      if (!AdminRole.active.contains(a.role)) return const [];
+    }
+    final role = a?.role ?? AdminRole.admin;
+    final granted = (a?.permissions.isNotEmpty ?? false)
+        ? a!.permissions
+        : (_cachedPermissions?.isNotEmpty == true
+            ? _cachedPermissions!
+            : defaultPermissionsFor(role));
+    // A member signed in under a delegate role is limited to the delegate
+    // panels (never escalates beyond what the owner granted).
+    if (role == AdminRole.delegate) {
       final delegateSet = defaultPermissionsFor(AdminRole.delegate).toSet();
       return granted.where(delegateSet.contains).toList();
     }
@@ -686,68 +817,145 @@ class AppProvider extends ChangeNotifier {
   /// permissions and role granted by the owner on another device take effect on
   /// this device immediately, without a restart. Ignores the stream in HTTP
   /// mode and when no Firestore session is resolved.
+  ///
+  /// Removal is handled here too: when the owner deletes the member (which
+  /// writes a `revoked` tombstone) or the document disappears, this device signs
+  /// itself out on the spot instead of holding a session that the rules would
+  /// already be refusing. The listener is re-armed on error, because a
+  /// permission-denied error is exactly what a demotion produces and a dead
+  /// subscription would freeze the old permission set on screen forever.
   Future<void> watchOwnAdmin() async {
     final uid = _currentAdmin?.id;
     if (uid == null || uid.isEmpty) return;
     final backend = await BackendManager.resolve();
     if (!backend.isFirebase) return;
     await _adminSub?.cancel();
-    _adminSub = backend.watchOwnAdmin(uid).listen((snap) {
-      if (snap == null || _disposed) return;
-      final prev = _currentAdmin;
-      _currentAdmin = snap;
-      _cachedPermissions =
-          snap.permissions.isNotEmpty ? snap.permissions : defaultPermissionsFor(snap.role);
-      _activeRole = snap.role;
-      if (snap.role != prev?.role) {
-        unawaited(SecureStore.writeAdminRole(snap.role));
-      }
-      if (prev?.permissions != snap.permissions || prev?.role != snap.role) {
-        unawaited(SecureStore.writeAdminPermissions(permissions.toList()));
-      }
-      notifyListeners();
-    });
+    _adminSub = backend.watchOwnAdmin(uid).listen(
+      (snap) {
+        if (_disposed) return;
+        if (snap == null || !AdminRole.active.contains(snap.role)) {
+          // Removed from the team while signed in: drop the session now.
+          unawaited(_handleRevoked());
+          return;
+        }
+        final prev = _currentAdmin;
+        _currentAdmin = snap;
+        _cachedPermissions =
+            snap.permissions.isNotEmpty ? snap.permissions : defaultPermissionsFor(snap.role);
+        _activeRole = snap.role;
+        if (snap.role != prev?.role) {
+          unawaited(SecureStore.writeAdminRole(snap.role));
+        }
+        if (prev?.permissions != snap.permissions || prev?.role != snap.role) {
+          unawaited(SecureStore.writeAdminPermissions(permissions.toList()));
+        }
+        notifyListeners();
+      },
+      onError: (Object _) {
+        // The document became unreadable (e.g. the role was demoted to
+        // delegate, which no longer satisfies isAdmin() for the full list).
+        // Re-arm so the next revocation is still observed.
+        if (_disposed) return;
+        scheduleMicrotask(watchOwnAdmin);
+      },
+    );
+  }
+
+  /// Wipes the local session after the owner removed this account.
+  ///
+  /// This runs on a Firestore listener callback, so it must never throw: an
+  /// exception here would abort before the session is cleared and leave a
+  /// revoked member signed in on screen. Local state is nulled first and
+  /// synchronously, so the panels disappear even if the teardown below fails.
+  Future<void> _handleRevoked() async {
+    if (_disposed) return;
+    _error = 'تم إلغاء هذا الحساب من الفريق. تم تسجيل الخروج.';
+    _currentAdmin = null;
+    _cachedPermissions = const [];
+    _activeRole = null;
+    notifyListeners();
+    try {
+      await _adminSub?.cancel();
+    } catch (_) {}
+    _adminSub = null;
+    try {
+      await logout();
+    } catch (_) {
+      // Teardown partially failed (offline keychain, unreachable backend). The
+      // in-memory session is already gone, which is what gates the UI; the
+      // stored token is revoked server-side the moment the tombstone lands.
+    }
   }
 
   Future<void> resolveCurrentAdmin() async {
     if (_token == null) return;
+    // Did the team list actually load? A failed read is NOT evidence that the
+    // member was removed, and must never be treated as a revocation: that would
+    // sign a perfectly valid admin out on the first flaky network response.
+    var listLoaded = true;
     try {
       await loadAdmins();
-    } catch (_) {}
+    } catch (_) {
+      listLoaded = false;
+    }
+
+    // Match by uid first. uid is the document key, so it cannot drift the way an
+    // e-mail can (this project already had an owner whose Auth address was
+    // info@gossts.com while the /admins document said info@gosst.com, and the
+    // e-mail comparison silently signed them out). The server profile already
+    // carries the uid, so the common path never depends on a list read at all.
     AdminUser? matched;
-    for (final a in _admins) {
-      if (a.email.toLowerCase() == _adminEmail.toLowerCase()) {
-        matched = a;
-        break;
+    final uid = _currentAdmin?.id;
+    if (uid != null && uid.isNotEmpty) {
+      for (final a in _admins) {
+        if (a.id == uid) {
+          matched = a;
+          break;
+        }
       }
     }
-    // Legacy master-password login (no email address): fall back to the team
-    // owner so the account keeps working. A named login that does not match a
-    // team member must NOT escalate to the owner, so it stays unresolved.
-    if (matched == null && _adminEmail.isEmpty) {
+    if (matched == null && _adminEmail.isNotEmpty) {
       for (final a in _admins) {
-        if (a.role == AdminRole.super_ || _masterAdminUids.contains(a.id)) {
+        if (a.email.trim().toLowerCase() == _adminEmail.trim().toLowerCase()) {
+          matched = a;
+          break;
+        }
+      }
+    }
+    // Legacy master-password login (no e-mail address, HTTP mode only): fall
+    // back to the team owner so the account keeps working.
+    if (matched == null && _adminEmail.isEmpty && listLoaded) {
+      for (final a in _admins) {
+        if (a.role == AdminRole.super_) {
           matched = a;
           break;
         }
       }
       if (matched == null && _admins.isNotEmpty) matched = _admins.first;
     }
-    // Only overwrite _currentAdmin when the team list confirms a profile.
-    // When loadAdmins fails (e.g. a delegate lacks the "team" permission to
-    // read the full list) the server-authoritative profile set during login
-    // is already in _currentAdmin and must be preserved — never overwrite it
-    // with null, or all panels disappear.
+
     if (matched != null) {
+      // The team list confirms a live profile. This is the only writer allowed
+      // to populate _currentAdmin, so a stale cache can never be promoted.
       _currentAdmin = matched;
-      _cachedPermissions = matched.permissions.isNotEmpty ? matched.permissions : defaultPermissionsFor(matched.role);
+      _cachedPermissions = matched.permissions.isNotEmpty
+          ? matched.permissions
+          : defaultPermissionsFor(matched.role);
       _activeRole = matched.role;
-    } else if (_currentAdmin == null && _adminEmail.isNotEmpty) {
-      // A named login that no longer matches any team member (e.g. deleted by
-      // the owner) must NOT keep its prior permissions: block it here rather
-      // than falling back to the full panel set.
+    } else if (listLoaded) {
+      // The list loaded fine and this account is genuinely not in it — that is
+      // the revoked/removed case. Clear the profile and drop the session.
+      _currentAdmin = null;
       _cachedPermissions = const [];
+      _activeRole = null;
+      if (_adminEmail.isNotEmpty) {
+        await _handleRevoked();
+        return;
+      }
     }
+    // else: the list could not be read. Keep the server profile from sign-in
+    // (it was validated against the live /admins document by the backend) and
+    // stay signed in. watchOwnAdmin still reports a real removal promptly.
     await SecureStore.writeAdminPermissions(permissions.toList());
     notifyListeners();
   }
@@ -771,11 +979,13 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> loadAdmins() async {
     if (_token == null) return;
-    try {
-      final backend = await BackendManager.resolve();
-      _admins = await backend.fetchAdmins(_token!);
-      notifyListeners();
-    } catch (_) {}
+    // Rethrows on purpose. `resolveCurrentAdmin` must be able to tell "the
+    // read failed" from "the team is genuinely empty" — swallowing the error
+    // here made a transient network failure look like a revocation and signed
+    // a valid admin out.
+    final backend = await BackendManager.resolve();
+    _admins = await backend.fetchAdmins(_token!);
+    notifyListeners();
   }
 
   Future<String> addAdmin({
@@ -796,7 +1006,9 @@ class AppProvider extends ChangeNotifier {
         role: role,
         permissions: permissions,
       );
-      await loadAdmins();
+      // The write already succeeded; a failed refresh must not be reported as
+      // a failed save.
+      await loadAdmins().catchError((_) {});
       return '';
     } catch (e) {
       return e.toString();
@@ -818,7 +1030,7 @@ class AppProvider extends ChangeNotifier {
         role: role,
         permissions: permissions,
       );
-      await loadAdmins();
+      await loadAdmins().catchError((_) {});
       await resolveCurrentAdmin();
       return '';
     } catch (e) {
@@ -826,21 +1038,33 @@ class AppProvider extends ChangeNotifier {
     }
   }
 
-  /// Owner tool: permanently remove a team member (the owner/super admins are
-  /// protected by the server and by the UI).
-  Future<String> deleteAdmin(String adminId) async {
-    if (_token == null) return 'Not logged in';
+  /// Owner tool: remove a team member.
+  ///
+  /// The backend rewrites the account into a `revoked` tombstone, which strips
+  /// its permissions immediately and reserves the e-mail permanently. It also
+  /// asks the server to disable/delete the Firebase Auth record so the raw
+  /// credential stops working.
+  ///
+  /// Returns a [message] plus [fatal]. `fatal: false` with a non-empty message
+  /// means access was revoked but closing the sign-in credential did not
+  /// complete (server unreachable) — the caller should warn, not report failure,
+  /// because the account still cannot reach any panel.
+  /// The owner/super admin is protected by the rules and the server.
+  Future<({String message, bool fatal})> deleteAdmin(String adminId) async {
+    if (_token == null) {
+      return (message: 'Not logged in', fatal: true);
+    }
     try {
       final backend = await BackendManager.resolve();
-      await backend.deleteAdmin(_token!, adminId);
-      await loadAdmins();
+      final res = await backend.deleteAdmin(_token!, adminId);
+      await loadAdmins().catchError((_) {});
       if (_currentAdmin?.id == adminId) {
         _currentAdmin = null;
-        _cachedPermissions = null;
+        _cachedPermissions = const [];
       }
-      return '';
+      return (message: res.warning ?? '', fatal: false);
     } catch (e) {
-      return e.toString();
+      return (message: e.toString(), fatal: true);
     }
   }
 
@@ -907,6 +1131,11 @@ class AppProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     final legacyToken = _token;
+    // Stop the own-admin listener first: it is the component that can rewrite
+    // _currentAdmin, so leaving it alive would let a late event resurrect the
+    // session that this method is tearing down.
+    await _adminSub?.cancel();
+    _adminSub = null;
     _token = null;
     _currentAdmin = null;
     _cachedPermissions = null;

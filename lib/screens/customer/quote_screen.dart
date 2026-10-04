@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
+import '../../app/motion.dart';
 import '../../models/models.dart';
 import '../../widgets/widgets.dart';
 import 'my_orders_screen.dart';
@@ -133,15 +135,29 @@ class _QuoteScreenState extends State<QuoteScreen> {
             onRefresh: () => app.loadProducts(),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(context.gap(16)),
               child: Column(
                 children: [
-                  _filterBar(context, en),
-                  const SizedBox(height: 12),
-                  if (_showCart) ...[
-                    _cartPanel(context, app, en),
-                    const SizedBox(height: 16),
-                  ],
+                  FadeSlideIn(
+                    // The quote form is a tall stack of inputs; capping its width
+                    // keeps the fields a usable size on a 10" tablet instead of
+                    // stretching each one across 800dp.
+                    child: context.constrain(
+                      Column(
+                        children: [
+                          FadeSlideIn(child: _filterBar(context, en)),
+                          const SizedBox(height: 12),
+                          if (_showCart) ...[
+                            FadeSlideIn(
+                              delay: const Duration(milliseconds: 70),
+                              child: _cartPanel(context, app, en),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
                   _productGrid(filtered, en),
                 ],
               ),
@@ -242,7 +258,7 @@ class _QuoteScreenState extends State<QuoteScreen> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(context.gap(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

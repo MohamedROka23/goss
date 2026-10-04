@@ -2,10 +2,12 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'app/responsive.dart';
 import 'app/theme.dart';
 import 'models/chat_models.dart';
 import 'providers/app_provider.dart';
@@ -72,19 +74,27 @@ class GossApp extends StatelessWidget {
       themeMode: app.themeMode,
       locale: app.locale,
       supportedLocales: const [Locale('en'), Locale('ar')],
+      // Every scrollable in the app inherits this: momentum-based dragging
+      // with consistent wheel and touch behaviour, so lists glide instead of
+      // snapping and no screen has to opt in.
+      scrollBehavior: const _GossScrollBehavior(),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
-        // Clamp the system text scale so accessibility font sizes never
-        // overflow the fixed-height cards, grids, buttons and chips used
-        // throughout the app. (1.0–1.3 keeps content readable on every screen.)
         final media = MediaQuery.of(context);
+        // One adaptive hook for the whole app. Multiplying a device factor into
+        // the system text scale resizes every piece of text — including the
+        // ~260 hard-coded fontSize values across the screens — so a 7" or 10"
+        // tablet gets proportional body copy while a small phone stays
+        // legible, with no per-screen declarations.
+        final adaptive = Responsive.of(context).scale;
+        final system = media.textScaler.scale(1).clamp(0.85, 1.3);
         return MediaQuery(
           data: media.copyWith(
-            textScaler: media.textScaler.clamp(maxScaleFactor: 1.3),
+            textScaler: TextScaler.linear(system * adaptive),
           ),
           child: Directionality(
             textDirection: app.isArabic ? TextDirection.rtl : TextDirection.ltr,
@@ -161,4 +171,38 @@ class _NotificationRouter {
         return;
     }
   }
+}
+/// Global scroll tuning.
+///
+/// Android lists normally stop dead at the ends; iOS ones bounce. This gives
+/// the whole app one behaviour: momentum everywhere, with the rubber-band
+/// overscroll so a list that has reached its end still feels alive, and drag
+/// devices enabled so a mouse or stylus scrolls the same way a finger does.
+class _GossScrollBehavior extends MaterialScrollBehavior {
+  const _GossScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => const {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    // The default Material indicator draws a glowing vertical bar down the
+    // screen edge. Dropping it keeps long lists visually calm.
+    return child;
+  }
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      );
 }

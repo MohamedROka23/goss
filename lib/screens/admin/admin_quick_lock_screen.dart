@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
+import '../../services/biometric_service.dart';
 import '../../providers/app_provider.dart';
 
 /// Quick-lock unlock screen (قفل سريع): shown before the admin dashboard when a
@@ -24,7 +25,6 @@ class _AdminQuickLockScreenState extends State<AdminQuickLockScreen> {
   static const _lockoutDuration = Duration(seconds: 30);
 
   final _pinCtrl = TextEditingController();
-  final _auth = LocalAuthentication();
   bool _busy = false;
   bool _pinError = false;
   int _failCount = 0;
@@ -56,27 +56,22 @@ class _AdminQuickLockScreenState extends State<AdminQuickLockScreen> {
   Future<void> _unlockBio(AppProvider app) async {
     if (_busy) return;
     setState(() => _busy = true);
-    try {
-      final supported = await _auth.canCheckBiometrics;
-      if (!supported) {
-        if (mounted && kDebugMode) debugPrint('no biometrics enrolled');
-        return;
+    // Probe first so a device whose sensor has nothing enrolled does not get a
+    // prompt that is guaranteed to fail. Never throws: every failure leaves the
+    // 4-digit PIN and the sign-out fallback reachable.
+    final capability = await app.refreshBiometrics();
+    if (!mounted) return;
+    if (capability != BiometricCapability.available) {
+      if (kDebugMode) {
+        debugPrint('biometric unlock unavailable: ${biometrics.lastDiagnostic}');
       }
-      final ok = await _auth.authenticate(
-        localizedReason: 'Unlock the admin panel',
-        biometricOnly: true,
-        // Retry automatically if the system backgrounds the prompt.
-        persistAcrossBackgrounding: true,
-      );
-      if (ok && mounted) {
-        setState(() => _busy = false);
-        await app.unmarkQuickLocked();
-      } else if (mounted) {
-        setState(() => _busy = false);
-      }
-    } catch (_) {
-      if (mounted) setState(() => _busy = false);
+      setState(() => _busy = false);
+      return;
     }
+    final ok = await app.authenticateBiometric(isArabic: app.isArabic);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) await app.unmarkQuickLocked();
   }
 
   Future<void> _unlockPin(AppProvider app) async {
@@ -132,7 +127,7 @@ class _AdminQuickLockScreenState extends State<AdminQuickLockScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(24 * context.goss.density),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
@@ -161,11 +156,13 @@ class _AdminQuickLockScreenState extends State<AdminQuickLockScreen> {
                     style: TextStyle(color: Colors.white.withValues(alpha: 0.75)),
                   ),
                   const SizedBox(height: 28),
-                  if (app.quickLockBio) ...[
+                  if (app.quickLockBio && app.biometricHardwarePresent) ...[
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.tonalIcon(
-                        onPressed: _busy ? null : () => _unlockBio(app),
+                        onPressed: _busy
+                            ? null
+                            : () => _unlockBio(app),
                         icon: const Icon(Icons.fingerprint, size: 26),
                         label: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -174,6 +171,26 @@ class _AdminQuickLockScreenState extends State<AdminQuickLockScreen> {
                       ),
                     ),
                     const SizedBox(height: 14),
+                  ] else if (app.quickLockBio) ...[
+                    // Sensor present but unusable: explain it rather than
+                    // showing a button that cannot succeed. The PIN and
+                    // sign-out paths below stay available either way.
+                    const SizedBox(height: 8),
+                    Text(
+                      BiometricService.messageFor(
+                            app.biometricCapability,
+                            isArabic: !en,
+                          ) ??
+                          (en
+                              ? 'Biometrics are not available on this device.'
+                              : 'البصمة غير متوفرة على هذا الجهاز.'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                   ],
                   TextField(
                     controller: _pinCtrl,

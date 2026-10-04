@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/admin_provider.dart';
 import '../../app/theme.dart';
+import '../../app/motion.dart';
+import '../../app/responsive.dart';
 import '../../models/models.dart';
 import '../../widgets/widgets.dart';
 
@@ -69,8 +71,10 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
         ? base
         : base.where((r) => _fmtDate(r.createdAt) == filterStr).toList();
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    return FadeSlideIn(
+      child: context.constrain(
+        ListView(
+      padding: EdgeInsets.all(context.goss.pagePadding),
       children: [
         Row(
           children: [
@@ -128,17 +132,23 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
           ),
           if (_showArchive) ...[
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Checkbox(
-                  value: _allSelected(filtered),
-                  onChanged: (_) => _toggleAll(filtered),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Checkbox(
+                      value: _allSelected(filtered),
+                      onChanged: (_) => _toggleAll(filtered),
+                    ),
+                    Text(en ? 'Select all' : 'تحديد الكل'),
+                  ],
                 ),
-                Text(en ? 'Select all' : 'تحديد الكل'),
-                const Spacer(),
                 if (_selected.isNotEmpty) ...[
-                  Text('${_selected.length}'),
-                  const SizedBox(width: 8),
+                  AnimatedCount(value: _selected.length),
                   OutlinedButton.icon(
                     onPressed: () => _bulkDelete(app, admin, en),
                     style: OutlinedButton.styleFrom(foregroundColor: GossColors.red),
@@ -172,29 +182,40 @@ class _AdminRequestsTabState extends State<AdminRequestsTab> {
             ],
           ),
         ],
-        if (filtered.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              filterStr != null
-                  ? (en ? 'No requests on this date.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u062a\u0627\u0631\u064a\u062e.')
-                  : (_showArchive
-                      ? (en ? 'No archived requests.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0641\u064a \u0627\u0644\u0623\u0631\u0634\u064a\u0641.')
-                      : (en ? 'No requests yet.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0628\u0639\u062f.')),
-              style: TextStyle(color: context.mutedColor),
-            ),
-          ),
-        ...filtered.map((r) => _requestCard(context, app, admin, en, r,
-            showCheck: _showArchive,
-            selected: _selected.contains(r.id),
-            onToggle: () => setState(() {
-              if (_selected.contains(r.id)) {
-                _selected.remove(r.id);
-              } else {
-                _selected.add(r.id);
-              }
-            }))),
+        FadeSwitcher(
+          child: filtered.isEmpty
+              ? Padding(
+                  key: const ValueKey('requests-empty'),
+                  padding: EdgeInsets.all(context.gap(16)),
+                  child: Text(
+                    filterStr != null
+                        ? (en ? 'No requests on this date.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u062a\u0627\u0631\u064a\u062e.')
+                        : (_showArchive
+                            ? (en ? 'No archived requests.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0641\u064a \u0627\u0644\u0623\u0631\u0634\u064a\u0641.')
+                            : (en ? 'No requests yet.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0628\u0639\u062f.')),
+                    style: TextStyle(color: context.mutedColor),
+                  ),
+                )
+              : Column(
+                  key: const ValueKey('requests-list'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: filtered
+                      .map((r) => _requestCard(context, app, admin, en, r,
+                          showCheck: _showArchive,
+                          selected: _selected.contains(r.id),
+                          onToggle: () => setState(() {
+                            if (_selected.contains(r.id)) {
+                              _selected.remove(r.id);
+                            } else {
+                              _selected.add(r.id);
+                            }
+                          })))
+                      .toList(),
+                ),
+        ),
       ],
+        ),
+      ),
     );
   }
 

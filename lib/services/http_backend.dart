@@ -57,23 +57,69 @@ class HttpBackend implements GossBackend {
     return data.map((e) => Product.fromJson(e)).toList();
   }
 
-  @override
-  Stream<List<Product>> watchProducts() {
-    final controller = StreamController<List<Product>>();
-    Future<void> poll() async {
-      try {
-        controller.add(await fetchProducts());
-      } catch (_) {}
-    }
+  /// Wraps a one-shot fetch in a periodic stream, used only by the HTTP
+  /// backend. Firestore mode delivers real push updates, but this backend has
+  /// no server-sent channel, so it polls. The previous hand-rolled copies of
+  /// this raced: `onCancel` closed the controller while an in-flight `poll()`
+  /// could still `add()`, throwing on a closed sink. This version is safe to
+  /// cancel from either side.
+  Stream<List<T>> _polled<T>(Future<List<T>> Function() fetch) {
+    late final StreamController<List<T>> controller;
+    Timer? timer;
+    var cancelled = false;
+    controller = StreamController<List<T>>(
+      onListen: () async {
+        Future<void> poll() async {
+          if (cancelled) return;
+          try {
+            final value = await fetch();
+            if (!cancelled && !controller.isClosed) controller.add(value);
+          } catch (_) {
+            // Transient failure: keep the last good list on screen.
+          }
+        }
 
-    poll();
-    final timer = Timer.periodic(const Duration(seconds: 5), (_) => poll());
-    controller.onCancel = () {
-      timer.cancel();
-      controller.close();
-    };
+        await poll();
+        timer = Timer.periodic(const Duration(seconds: 5), (_) => poll());
+      },
+      onCancel: () {
+        cancelled = true;
+        timer?.cancel();
+        timer = null;
+      },
+    );
     return controller.stream;
   }
+
+  @override
+  Stream<List<Product>> watchProducts() => _polled(fetchProducts);
+
+  @override
+  Stream<List<AdminUser>> watchAdmins({String token = ''}) =>
+      _polled(() => fetchAdmins(token));
+
+  @override
+  Stream<List<ProductCategory>> watchCategories() => _polled(fetchCategories);
+
+  @override
+  Stream<List<CustomerRequest>> watchMyRequests(String customerId) =>
+      _polled(() => fetchMyRequests(customerId));
+
+  @override
+  Stream<List<Purchase>> watchPurchases({String token = ''}) =>
+      _polled(() => fetchPurchases(token));
+
+  @override
+  Stream<List<Expense>> watchExpenses({String token = ''}) =>
+      _polled(() => fetchExpenses(token));
+
+  @override
+  Stream<List<JournalEntry>> watchJournal({String token = ''}) =>
+      _polled(() => fetchJournal(token));
+
+  @override
+  Stream<List<Payment>> watchPayments({String token = ''}) =>
+      _polled(() => fetchPayments(token));
 
   @override
   Future<String> loginAdmin(String email, String password) async {
@@ -237,12 +283,19 @@ class HttpBackend implements GossBackend {
   }
 
   @override
-  Future<void> deleteAdmin(String token, String id) async {
+  Future<({bool authDeleted, String? warning})> deleteAdmin(
+    String token,
+    String id,
+  ) async {
     final res = await _client.delete(
       _uri('/api/admins/$id'),
       headers: _headers(token: token),
     );
     _check(res);
+    // The HTTP backend tombstones the account server-side and revokes its
+    // sessions, so the credential is closed as part of the same request — no
+    // separate Auth-deletion step exists on this path.
+    return (authDeleted: true, warning: null);
   }
 
   @override

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../providers/app_provider.dart';
 import '../../services/backend_manager.dart';
+import '../../services/biometric_service.dart';
 
 /// Dialog used to arm quick sign-in (الدخول السريع). When armed, the admin
 /// login screen can sign back in with a device passcode or fingerprint.
@@ -111,6 +113,20 @@ class _QuickSignInSetupSheetState extends State<QuickSignInSetupSheet> {
     });
   }
 
+  /// Explains exactly why biometrics are being withheld, instead of a blanket
+  /// "not available" that hides the difference between a device with no sensor
+  /// and a sensor the user simply has not enrolled yet.
+  Widget? _bioUnavailableReason(BuildContext context, bool en, AppProvider app) {
+    if (widget.bioSupported) return null;
+    final reason = app.biometricHardwarePresent
+        ? BiometricService.messageFor(app.biometricCapability, isArabic: !en)
+        : (en ? 'Not available on this device' : 'غير متاح على هذا الجهاز');
+    return Text(
+      reason ?? (en ? 'Not available on this device' : 'غير متاح على هذا الجهاز'),
+      style: TextStyle(fontSize: 12, color: context.mutedColor),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppProvider>();
@@ -118,11 +134,17 @@ class _QuickSignInSetupSheetState extends State<QuickSignInSetupSheet> {
 
     return AlertDialog(
       title: Text(en ? 'Quick sign-in' : 'الدخول السريع'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: 16 * context.goss.density,
+        vertical: 24,
+      ),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Text(
               en
                   ? 'Sign back in from the admin login screen with a 4-digit passcode or fingerprint. Credentials are stored encrypted in the device keystore/keychain.'
@@ -183,9 +205,7 @@ class _QuickSignInSetupSheetState extends State<QuickSignInSetupSheet> {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(en ? 'Fingerprint / face unlock' : 'الفتح بالبصمة / الوش'),
-              subtitle: widget.bioSupported
-                  ? null
-                  : Text(en ? 'Not available on this device' : 'غير متاح على هذا الجهاز'),
+              subtitle: _bioUnavailableReason(context, en, app),
               value: _bio && widget.bioSupported,
               onChanged: _saving
                   ? null
@@ -198,7 +218,8 @@ class _QuickSignInSetupSheetState extends State<QuickSignInSetupSheet> {
               const SizedBox(height: 8),
               Text(_error!, style: const TextStyle(color: GossColors.red, fontSize: 13)),
             ],
-          ],
+            ],
+          ),
         ),
       ),
       actions: [

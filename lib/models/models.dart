@@ -629,10 +629,24 @@ String purchaseCodeFor(int orderNo) {
 
 /// Admin roles: super (owner), admin (full/permission-gated team member),
 /// delegate (field/fulfilment agent), each granted permissions by the owner.
+///
+/// [revoked] is not a role a human can assign — it is the tombstone written
+/// when an account is removed from the team. The document is kept (rather than
+/// deleted) for three reasons: the e-mail stays reserved so the address cannot
+/// be re-registered, the removed member's own device can still read its own
+/// document and therefore *detect* the revocation and sign itself out, and the
+/// account cannot be silently resurrected by a stale list. Every rule and gate
+/// treats it as "not a team member": it is in no role allow-list, so the
+/// Firestore rules deny it everything and the app signs it out.
 class AdminRole {
   static const super_ = 'super';
   static const admin = 'admin';
   static const delegate = 'delegate';
+  static const revoked = 'revoked';
+
+  /// Roles that represent a live team member (i.e. everything except the
+  /// tombstone). Used to filter the team panel and to decide sign-in.
+  static const List<String> active = [super_, admin, delegate];
 }
 
 String adminRoleLabel(String role, {required bool ar}) {
@@ -677,7 +691,12 @@ List<String> defaultPermissionsFor(String role) {
   if (role == AdminRole.delegate) {
     return [AdminPerms.requests, AdminPerms.customers, AdminPerms.tracking, AdminPerms.chat];
   }
-  return [...allPermissionKeys];
+  // Fail closed: only super and admin have a full default set. An unknown or
+  // revoked role must never inherit the whole panel.
+  if (role == AdminRole.super_ || role == AdminRole.admin) {
+    return [...allPermissionKeys];
+  }
+  return const [];
 }
 
 String permissionLabel(String key, {required bool ar}) {

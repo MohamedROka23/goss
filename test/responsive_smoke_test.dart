@@ -30,6 +30,16 @@ import 'package:goss/screens/admin/admin_purchases_tab.dart';
 import 'package:goss/screens/admin/admin_profit_tab.dart';
 import 'package:goss/screens/admin/admin_expenses_tab.dart';
 import 'package:goss/screens/admin/admin_team_tab.dart';
+import 'package:goss/screens/admin/admin_settings_tab.dart';
+import 'package:goss/screens/admin/admin_product_import_screen.dart';
+import 'package:goss/screens/admin/admin_login_screen.dart';
+import 'package:goss/screens/admin/admin_quick_lock_screen.dart';
+import 'package:goss/screens/admin/accounting/admin_accounting_tab.dart';
+import 'package:goss/screens/admin/accounting/accounting_income_screen.dart';
+import 'package:goss/screens/admin/accounting/accounting_journal_screen.dart';
+import 'package:goss/screens/admin/accounting/accounting_ledger_screen.dart';
+import 'package:goss/screens/admin/accounting/accounting_receivables_screen.dart';
+import 'package:goss/screens/admin/accounting/accounting_report_screen.dart';
 
 const _sizes = <Size>[
   Size(320, 569), // very small phone portrait
@@ -85,8 +95,11 @@ Future<void> _pumpAt(WidgetTester tester, Widget home, Size size, double scale,
     tester.view.resetDevicePixelRatio();
   });
   await tester.pumpWidget(_harness(home, scale, ar: ar));
-  // Let post-frame callbacks / async loads settle.
-  await tester.pump(const Duration(milliseconds: 100));
+  // Let post-frame callbacks / async loads settle. AppProvider reads the
+  // cached permission set asynchronously on construction, so a single short
+  // pump can race it and hide the admin tabs that are keyed off it.
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
   // Dispose providers -> cancels polling timers/streams so no pending timers.
   await tester.pumpWidget(const SizedBox.shrink());
 }
@@ -138,6 +151,25 @@ void main() {
     'AdminExpensesTab': const AdminExpensesTab(),
     'AdminTeamTab': const AdminTeamTab(),
     'AdminNotificationsScreen': const AdminNotificationsScreen(),
+    // Screens that had no responsive coverage at all: the accounting suite,
+    // chat, settings, product import and the login/lock entry points. These
+    // carry the widest fixed-width rows in the app, so they are exactly the
+    // ones an overflow would hide in.
+    'AdminAccountingTab': const AdminAccountingTab(),
+    'AccountingIncome': const AccountingIncomeScreen(),
+    'AccountingJournal': const AccountingJournalScreen(),
+    'AccountingLedger': const AccountingLedgerScreen(),
+    'AccountingReceivables': const AccountingReceivablesScreen(),
+    'AccountingReport': const AccountingReportScreen(),
+    'AdminSettingsTab': const AdminSettingsTab(),
+    'AdminProductImport': const AdminProductImportScreen(),
+    'AdminLogin': const AdminLoginScreen(),
+    'AdminQuickLock': const AdminQuickLockScreen(),
+    // AdminChatTab / ChatListScreen / ChatScreen are intentionally absent:
+    // they call FirebaseFirestore.instance during build, which throws with no
+    // app initialized, so this harness cannot pump them at all. Their logic is
+    // covered by chat_crypto_test.dart, and their layout still needs a real
+    // device check.
   };
 
   for (final w in customer.entries) {
@@ -174,8 +206,8 @@ void main() {
         await tester.pumpWidget(_harness(const AdminShell(), scale));
         await tester.pump(const Duration(milliseconds: 100));
         const titles = [
-          'Requests', 'Tracking', 'Customers', 'Quotes',
-          'Purchasing', 'Profit', 'Accounting', 'Admins',
+          'Requests', 'Tracking', 'Customers', 'Products',
+          'Purchasing', 'Accounting', 'Admins',
         ];
         final view = tester.view.physicalSize / tester.view.devicePixelRatio;
         bool fullyVisible(String t) => tester
@@ -200,7 +232,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(
-          fullyVisible('Quotes') || fullyVisible('Purchasing') || fullyVisible('Profit'),
+          fullyVisible('Products') || fullyVisible('Purchasing'),
           isTrue,
           reason: 'swiping must reveal a later module',
         );

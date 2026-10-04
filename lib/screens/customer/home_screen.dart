@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
+import '../../app/motion.dart';
 import '../../widgets/widgets.dart';
 import 'service_detail_screen.dart';
 import 'catalog_screen.dart';
@@ -13,15 +15,22 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      child: Column(
-        children: [
-          _heroSection(context),
-          _servicesSection(context),
-          _aboutSection(context),
-          _processSection(context),
-          _valuesSection(context),
-          _footer(context),
-        ],
+      child: FadeSlideIn(
+        // One constrain at the root caps and centres the whole page on a 7"
+        // or 10" tablet. Without it every section below stretches to a full
+        // 800dp measure, which is far too wide to read comfortably.
+        child: context.constrain(
+          Column(
+            children: [
+              _heroSection(context),
+              _servicesSection(context),
+              _aboutSection(context),
+              _processSection(context),
+              _valuesSection(context),
+              _footer(context),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -46,7 +55,7 @@ class HomeScreen extends StatelessWidget {
     ];
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(context.gap(24)),
       color: context.sectionColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -56,11 +65,14 @@ class HomeScreen extends StatelessWidget {
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 210,
-              mainAxisExtent: 96,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
+            // Not const: the tile size and gutters follow the device bucket, so
+            // a tablet gets a slightly larger minimum tile and roomier spacing
+            // instead of phone-sized cards on a 10" panel.
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 210 * context.goss.density,
+              mainAxisExtent: 96 * context.goss.density,
+              crossAxisSpacing: context.gap(12),
+              mainAxisSpacing: context.gap(12),
             ),
             itemCount: services.length,
             itemBuilder: (ctx, i) {
@@ -86,7 +98,7 @@ class HomeScreen extends StatelessWidget {
                     }
                   },
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: EdgeInsets.all(context.gap(12)),
                     child: Text(
                       en ? services[i][0] : services[i][1],
                       style: TextStyle(fontWeight: FontWeight.w700, color: ctx.headingColor, fontSize: 14),
@@ -107,7 +119,7 @@ class HomeScreen extends StatelessWidget {
   Widget _aboutSection(BuildContext context) {
     final en = _en(context);
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(context.gap(24)),
       color: context.altSectionColor,
       width: double.infinity,
       child: Column(
@@ -115,11 +127,17 @@ class HomeScreen extends StatelessWidget {
         children: [
           SectionTitle(title: en ? 'About Gosst Co.' : '\u0639\u0646 \u0634\u0631\u0643\u0629 \u062c\u0648\u0633\u062a', isArabic: !en),
           const SizedBox(height: 8),
-          Text(
-            en
-                ? 'Gosst is a leading supply management and logistics company, delivering flexible, cost-effective solutions designed for corporate sectors and broad commercial trade. We operate under strict official registrations across three main sectors: general supplies, multimodal logistics, and customs clearance, ensuring absolute compliance and reliability for our clients.'
-                : 'جوست هي شركة رائدة في إدارة التوريدات والخدمات اللوجستية، تقدم حلولاً مرنة وفعالة من حيث التكلفة مصممة لقطاعات الشركات والتجارة الواسعة. نحن نعمل بموجب تسجيلات رسمية صارمة عبر ثلاثة قطاعات رئيسية: التوريدات العامة، والخدمات اللوجستية متعددة الوسائط، والتخليص الجمركي، مما يضمن الامتثال المطلق والموثوقية لعملائنا.',
-            style: TextStyle(color: context.mutedColor, fontSize: 15, height: 1.6),
+          // Capped measure: on a 10" tablet the root page can be 1000dp wide,
+          // and a single paragraph across that is unreadable. Body copy keeps a
+          // ~680dp line length while headings and cards use the full width.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: Text(
+              en
+                  ? 'Gosst is a leading supply management and logistics company, delivering flexible, cost-effective solutions designed for corporate sectors and broad commercial trade. We operate under strict official registrations across three main sectors: general supplies, multimodal logistics, and customs clearance, ensuring absolute compliance and reliability for our clients.'
+                  : 'جوست هي شركة رائدة في إدارة التوريدات والخدمات اللوجستية، تقدم حلولاً مرنة وفعالة من حيث التكلفة مصممة لقطاعات الشركات والتجارة الواسعة. نحن نعمل بموجب تسجيلات رسمية صارمة عبر ثلاثة قطاعات رئيسية: التوريدات العامة، والخدمات اللوجستية متعددة الوسائط، والتخليص الجمركي، مما يضمن الامتثال المطلق والموثوقية لعملائنا.',
+              style: TextStyle(color: context.mutedColor, fontSize: 15, height: 1.6),
+            ),
           ),
           const SizedBox(height: 16),
           LayoutBuilder(
@@ -135,9 +153,9 @@ class HomeScreen extends StatelessWidget {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 crossAxisCount: cols,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                mainAxisExtent: 124,
+                crossAxisSpacing: context.gap(12),
+                mainAxisSpacing: context.gap(12),
+                mainAxisExtent: 124 * context.goss.density,
                 children: [
                   _infoCard(context, en ? 'Officially Approved Suppliers' : 'موردون معتمدون رسمياً'),
                   _infoCard(context, en ? 'Certified Logistics Providers' : 'مزودو خدمات لوجستية معتمدون'),
@@ -169,7 +187,7 @@ class HomeScreen extends StatelessWidget {
     ];
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(context.gap(24)),
       color: context.sectionColor,
       width: double.infinity,
       child: Column(
@@ -238,7 +256,7 @@ class HomeScreen extends StatelessWidget {
     ];
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(context.gap(24)),
       color: context.altSectionColor,
       width: double.infinity,
       child: Column(
@@ -295,7 +313,7 @@ class HomeScreen extends StatelessWidget {
   Widget _infoCard(BuildContext context, String text) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(context.gap(12)),
         child: Text(
           text,
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: context.headingColor),
@@ -361,7 +379,7 @@ class HomeScreen extends StatelessWidget {
 
     return Container(
       color: GossColors.navy,
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(context.gap(24)),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final itemWidth = (constraints.maxWidth - 24) / (constraints.maxWidth < 700 ? 2 : 4);

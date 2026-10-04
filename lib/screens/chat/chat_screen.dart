@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../models/chat_models.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../services/chat_crypto.dart';
 import '../../services/chat_store.dart';
 import '../../services/notification_watcher.dart';
@@ -349,14 +350,25 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   );
                 }
-                return ListView.builder(
-                  controller: _scrollCtrl,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  itemCount: messages.length,
-                  itemBuilder: (context, i) => _MessageBubble(
-                    message: messages[i],
-                    mine: messages[i].senderRole == _me,
-                    open: _open,
+                return Center(
+                  // Caps the transcript on a 10" tablet. Without this the
+                  // bubbles spread across the full 800dp, leaving a short
+                  // message stranded at one edge with a huge empty gutter.
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: context.goss.maxContentWidth),
+                    child: ListView.builder(
+                      controller: _scrollCtrl,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: context.gap(10),
+                        vertical: context.gap(8),
+                      ),
+                      itemCount: messages.length,
+                      itemBuilder: (context, i) => _MessageBubble(
+                        message: messages[i],
+                        mine: messages[i].senderRole == _me,
+                        open: _open,
+                      ),
+                    ),
                   ),
                 );
               },

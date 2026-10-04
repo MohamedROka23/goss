@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/admin_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 
 class AdminNotificationsScreen extends StatefulWidget {
   const AdminNotificationsScreen({super.key});
@@ -63,7 +64,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
         title: Text(en ? 'Notifications' : 'التنبيهات'),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(context.gap(16)),
         children: [
           Text(
             en ? 'New Requests' : 'طلبات جديدة',

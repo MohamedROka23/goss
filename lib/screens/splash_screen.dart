@@ -47,10 +47,24 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     // Pure-white background, matching the native splash, so the animated logo
     // (designed on a near-white backdrop) sits seamlessly on one uniform tone.
+    // The logo is sized from the shorter screen edge instead of a fixed 190, so
+    // it stays fully visible on a 5" phone and does not look lost on a 10"
+    // tablet.
     return Scaffold(
       backgroundColor: Colors.white,
-      body: const Center(
-        child: AnimatedLogo(size: 190),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final shortest = constraints.biggest.shortestSide;
+          final logoSize = (shortest * 0.46).clamp(120.0, 260.0);
+          return Center(
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 0),
+                child: AnimatedLogo(size: logoSize),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
@@ -32,7 +34,9 @@ class _AdminTeamTabState extends State<AdminTeamTab> {
     _perms = defaultPermissionsFor(_role).toSet();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final app = context.read<AppProvider>();
-      if (app.token != null) app.loadAdmins();
+      // Fire-and-forget: an unhandled throw here would surface as a framework
+      // error even though the team screen itself is fine.
+      if (app.token != null) unawaited(app.loadAdmins().catchError((_) {}));
     });
   }
 
@@ -197,14 +201,18 @@ class _AdminTeamTabState extends State<AdminTeamTab> {
       ),
     );
     if (ok != true || !mounted) return;
-    final err = await app.deleteAdmin(member.id);
+    final res = await app.deleteAdmin(member.id);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(err.isEmpty
-          ? (en ? '${member.name} removed from the team.' : 'تمت إزالة ${member.name} من الفريق.')
-          : err),
-      backgroundColor: err.isEmpty ? GossColors.green : GossColors.red,
-    ));
+    final done = en
+        ? '${member.name} removed from the team.'
+        : 'تمت إزالة ${member.name} من الفريق.';
+    final color = res.fatal
+        ? GossColors.red
+        : (res.message.isNotEmpty ? GossColors.amber : GossColors.green);
+    final text = res.message.isNotEmpty ? res.message : done;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(text), backgroundColor: color),
+    );
   }
 
   Future<void> _submit(AppProvider app, bool en) async {

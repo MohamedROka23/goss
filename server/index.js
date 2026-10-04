@@ -41,6 +41,12 @@ function sessionUser(token) {
     sessions.delete(token);
     return null;
   }
+  // A revoked tombstone is a live row, so it needs its own check: the account
+  // still exists but holds no panels, and the issued session dies here.
+  if (live.role === "revoked") {
+    sessions.delete(token);
+    return null;
+  }
   // Reflect live role/permission changes on the next request so a promoted/
   // demoted member immediately sees the correct panels (never the stale set
   // captured at login time).
@@ -253,6 +259,15 @@ const DEFAULT_PERMISSIONS = {
   delegate: ["requests", "customers", "tracking"],
 };
 const TEAM_ROLES = ["super", "admin", "delegate"];
+
+// The seeded owner's account can never be demoted, edited, removed, or have its
+// Firebase Auth record deleted — otherwise the business loses its only way into
+// the admin panel. The uid is not a secret (it is compiled into the app), so it
+// must be protected server-side rather than treated as a credential.
+const OWNER_ID = "u-admin";
+const OWNER_UID = "Lt3KI3MAoIgnK1tt028suzJJDlq1";
+const PROTECTED_UIDS = new Set([OWNER_UID]);
+
 
 const STATUS_LABELS = {
   fresh: { en: "New request", ar: "Ø·Ù„Ø¨ Ø¬Ø¯ÙŠØ¯" },
@@ -852,13 +867,26 @@ app.post("/api/admins", auth, requirePerm("team"), (req, res) => {
     return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LEN} characters` });
   }
   const userRole = TEAM_ROLES.includes(role) ? role : "admin";
+  // A super admin is irreversible (see the PATCH/DELETE guards below), so only
+  // a super may mint one. Otherwise any member with `team` — which every admin
+  // is granted automatically — could create an unremovable backdoor account.
+  if (userRole === "super" && req.user.role !== "super") {
+    return res.status(403).json({ error: "Only a super admin can create a super admin" });
+  }
   let perms = Array.isArray(permissions) && permissions.length > 0
     ? permissions.filter((p) => PERMISSION_KEYS.includes(p))
     : [...DEFAULT_PERMISSIONS[userRole]];
   if (userRole === "admin" && !perms.includes("team")) perms.push("team");
   if (userRole !== "admin") perms = perms.filter((p) => p !== "team");
+  // A non-super caller may never hand out permissions it does not hold itself,
+  // otherwise `team` alone would grant the whole panel.
+  if (req.user.role !== "super") {
+    perms = perms.filter((p) => p === "team" || req.user.permissions.includes(p));
+  }
   const db = loadDb();
   if (!db.users) db.users = [];
+  // A revoked account keeps its row as a tombstone, so its e-mail stays
+  // reserved: re-registering that address would resurrect a removed member.
   if (db.users.some((u) => u.email === email.toLowerCase())) {
     return res.status(409).json({ error: "Email already registered" });
   }
@@ -881,14 +909,34 @@ app.patch("/api/admins/:id", auth, requirePerm("team"), (req, res) => {
   if (i < 0) return res.status(404).json({ error: "Not found" });
   const { role, permissions } = req.body || {};
   const target = db.users[i];
-  if (target.id === "u-admin") return res.status(403).json({ error: "Cannot change the owner" });
-  if (target.role === "super") return res.status(403).json({ error: "Cannot change a super admin" });
+  if (target.id === OWNER_ID) return res.status(403).json({ error: "Cannot change the owner" });
+  if (target.role === "super" && req.user.role !== "super") {
+    return res.status(403).json({ error: "Cannot change a super admin" });
+  }
   const nextRole = TEAM_ROLES.includes(role) ? role : target.role;
+  // Revocation is a one-way door: a tombstoned account can never be promoted
+  // back. Bringing the address back requires provisioning a fresh account.
+  if (target.role === "revoked") {
+    return res.status(403).json({ error: "This account was revoked and cannot be restored" });
+  }
+  // Promotion to super is a super-only operation, and a caller can never grant
+  // itself more than it already holds.
+  if (nextRole === "super" && target.role !== "super" && req.user.role !== "super") {
+    return res.status(403).json({ error: "Only a super admin can promote to super admin" });
+  }
+  // Editing your own record would let any team member grant itself the whole
+  // panel. The client hides the button; this is the actual control.
+  if (target.id === req.user.id && req.user.role !== "super") {
+    return res.status(403).json({ error: "Cannot edit your own account" });
+  }
   let perms = Array.isArray(permissions)
     ? permissions.filter((p) => PERMISSION_KEYS.includes(p))
     : [...(DEFAULT_PERMISSIONS[nextRole] || [])];
   if (nextRole === "admin" && !perms.includes("team")) perms.push("team");
   if (nextRole !== "admin") perms = perms.filter((p) => p !== "team");
+  if (req.user.role !== "super") {
+    perms = perms.filter((p) => p === "team" || req.user.permissions.includes(p));
+  }
   target.role = nextRole;
   target.permissions = perms;
   saveDb(db);
@@ -900,26 +948,49 @@ app.delete("/api/admins/:id", auth, requirePerm("team"), (req, res) => {
   const i = (db.users || []).findIndex((u) => u.id === req.params.id);
   if (i < 0) return res.status(404).json({ error: "Not found" });
   const target = db.users[i];
-  if (target.id === "u-admin") return res.status(403).json({ error: "Cannot remove the owner" });
-  if (target.role === "super") return res.status(403).json({ error: "Cannot remove a super admin" });
-  db.users.splice(i, 1);
+  if (target.id === OWNER_ID) return res.status(403).json({ error: "Cannot remove the owner" });
+  if (target.role === "super" && req.user.role !== "super") {
+    return res.status(403).json({ error: "Cannot remove a super admin" });
+  }
+  if (target.id === req.user.id) {
+    return res.status(403).json({ error: "Cannot remove your own account" });
+  }
+  // Tombstone rather than splice: the row keeps the e-mail reserved (so the
+  // address cannot be re-registered) and turns every panel off immediately,
+  // including for a session token that is already in flight.
+  target.role = "revoked";
+  target.permissions = [];
+  target.revokedAt = new Date().toISOString();
+  // The stored hash is dropped so a revoked account has no usable secret left
+  // in the file at all.
+  delete target.password;
   saveDb(db);
-  // Revoke every live session owned by the removed member so a deleted
-  // account cannot keep using its previously-issued token.
+  // Revoke every live session owned by the removed member so the account cannot
+  // keep using its previously-issued token.
   for (const [tok, s] of sessions) {
     if (s.id === target.id) sessions.delete(tok);
   }
   res.json({ ok: true });
 });
 
-// Hard-deletes a Firebase Authentication user so a removed team member can
-// never sign back in with the old email/password. Requires the Admin SDK to
-// be configured (GOOGLE_APPLICATION_CREDENTIALS) — otherwise returns 503 and
-// the app removes the Firestore document anyway (defense in depth).
-app.post("/api/firestore/delete-auth-user", (req, res) => {
+// Closes a removed member's sign-in credential for good: the Firebase Auth
+// record is DISABLED first (so the e-mail/password stops working immediately,
+// even against another client) and then DELETED (so the address is released and
+// the record is gone). Disabling before deleting matters because a plain delete
+// can silently fail or race, leaving a live credential behind.
+// Requires the Admin SDK (GOOGLE_APPLICATION_CREDENTIALS) — otherwise 503 and
+// the app keeps the Firestore tombstone, which already revokes all access.
+//
+// SECURITY: restricted to a super admin, and refuses the seeded owner, whose
+// uid is public (it is compiled into the app) — otherwise anyone could
+// permanently lock the business out of its own admin panel.
+app.post("/api/firestore/delete-auth-user", auth, requireRole("super"), (req, res) => {
   const uid = (req.body || {}).uid;
   if (typeof uid !== "string" || !uid) {
     return res.status(400).json({ error: "Missing uid" });
+  }
+  if (PROTECTED_UIDS.has(uid)) {
+    return res.status(403).json({ error: "Cannot delete the owner account" });
   }
   if (!fcmAuth) {
     return res.status(503).json({
@@ -928,13 +999,34 @@ app.post("/api/firestore/delete-auth-user", (req, res) => {
   }
   (async () => {
     try {
-      await fcmAuth.deleteUser(uid);
-      res.json({ ok: true });
+      // Disable first: an already-disabled user makes deleteUser throw
+      // auth/user-disabled, which we treat as the desired end state.
+      try {
+        await fcmAuth.disableUser(uid);
+      } catch (e) {
+        if (!isAlreadyGone(e)) throw e;
+      }
+      try {
+        await fcmAuth.deleteUser(uid);
+      } catch (e) {
+        if (!isAlreadyGone(e)) throw e;
+      }
+      res.json({ ok: true, disabled: true, deleted: true });
     } catch (e) {
       res.status(500).json({ error: e.message || "Delete failed" });
     }
   })();
 });
+
+// Firebase reports an already-disabled / already-missing user as a code. Both
+// mean the credential is not usable, which is the outcome we wanted.
+function isAlreadyGone(err) {
+  const code = (err && (err.code || err.errorInfo && err.errorInfo.code)) || "";
+  return (
+    String(code).includes("user-not-found") ||
+    String(code).includes("user-disabled")
+  );
+}
 
 app.post("/api/products", auth, requireRole("super", "admin"), (req, res) => {
   const db = loadDb();

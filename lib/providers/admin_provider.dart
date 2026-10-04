@@ -56,6 +56,10 @@ class AdminProvider extends ChangeNotifier {
   }
 
   StreamSubscription? _requestSub;
+  StreamSubscription? _expenseSub;
+  StreamSubscription? _purchaseSub;
+  StreamSubscription? _journalSub;
+  StreamSubscription? _paymentSub;
   String _lastSeenRequestAt = '';
   String? _lastError;
   String? get lastError => _lastError;
@@ -68,9 +72,16 @@ class AdminProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _requestSub?.cancel();
+    _expenseSub?.cancel();
+    _purchaseSub?.cancel();
+    _journalSub?.cancel();
+    _paymentSub?.cancel();
     super.dispose();
   }
+
+  bool _disposed = false;
 
   Future<void> startWatchingRequests(String token) async {
     final prefs = await SharedPreferences.getInstance();
@@ -95,6 +106,47 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  /// Live subscriptions for the accounting/procurement collections.
+  ///
+  /// These four were one-shot fetches, so an expense recorded on one device
+  /// (or a deletion, or a correction) only appeared on another device after a
+  /// manual reload. They now ride Firestore's push stream, which means a write
+  /// is visible everywhere the moment it commits. The first event doubles as
+  /// the initial load, so [reloadAll] is no longer needed for correctness — it
+  /// stays as the retry action behind the error banner.
+  Future<void> startWatchingCollections(String token) async {
+    try {
+      final backend = await BackendManager.resolve();
+      await Future.wait([
+        if (_expenseSub != null) _expenseSub!.cancel(),
+        if (_purchaseSub != null) _purchaseSub!.cancel(),
+        if (_journalSub != null) _journalSub!.cancel(),
+        if (_paymentSub != null) _paymentSub!.cancel(),
+      ]);
+      _expenseSub = backend
+          .watchExpenses(token: token)
+          .listen((v) => _apply(_expenses = v));
+      _purchaseSub = backend
+          .watchPurchases(token: token)
+          .listen((v) => _apply(_purchases = v));
+      _journalSub = backend
+          .watchJournal(token: token)
+          .listen((v) => _apply(_journal = v));
+      _paymentSub = backend
+          .watchPayments(token: token)
+          .listen((v) => _apply(_payments = v));
+      _lastError = null;
+    } catch (e) {
+      _setError(e);
+    }
+  }
+
+  void _apply(Object? _) {
+    if (_disposed) return;
+    _lastError = null;
+    notifyListeners();
+  }
+
   /// Re-runs every admin data load (used by the error banner retry button).
   Future<void> reloadAll(String token) async {
     await Future.wait([
@@ -108,8 +160,18 @@ class AdminProvider extends ChangeNotifier {
 
   /// Stops background subscriptions and clears admin-only data (on sign out).
   Future<void> reset() async {
-    await _requestSub?.cancel();
+    await Future.wait([
+      if (_requestSub != null) _requestSub!.cancel(),
+      if (_expenseSub != null) _expenseSub!.cancel(),
+      if (_purchaseSub != null) _purchaseSub!.cancel(),
+      if (_journalSub != null) _journalSub!.cancel(),
+      if (_paymentSub != null) _paymentSub!.cancel(),
+    ]);
     _requestSub = null;
+    _expenseSub = null;
+    _purchaseSub = null;
+    _journalSub = null;
+    _paymentSub = null;
     _requests = [];
     _expenses = [];
     _purchases = [];

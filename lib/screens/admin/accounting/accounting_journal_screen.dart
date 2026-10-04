@@ -3,6 +3,7 @@ import 'package:intl/intl.dart' show DateFormat;
 import 'package:provider/provider.dart';
 
 import '../../../app/theme.dart';
+import '../../../app/responsive.dart';
 import '../../../models/models.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/app_provider.dart';
@@ -82,7 +83,7 @@ class _AccountingJournalScreenState extends State<AccountingJournalScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(context.gap(16)),
         children: [
           Row(
             children: [

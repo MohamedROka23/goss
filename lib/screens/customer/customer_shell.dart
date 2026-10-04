@@ -1,21 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/app_provider.dart';
-import '../../app/theme.dart';
-import '../role_screen.dart';
-import '../chat/chat_list_screen.dart';
-import 'home_screen.dart';
-import 'about_screen.dart';
-import 'logistics_screen.dart';
-import 'supplies_screen.dart';
-import 'catalog_screen.dart';
-import 'quote_screen.dart';
-import 'contact_screen.dart';
-import 'settings_screen.dart';
-import 'notifications_screen.dart';
-import 'my_orders_screen.dart';
-import '../../widgets/widgets.dart';
 
+import '../../app/icons.dart';
+import '../../app/motion.dart';
+import '../../app/responsive.dart';
+import '../../app/spacing.dart';
+import '../../app/theme.dart';
+import '../../providers/app_provider.dart';
+import '../../widgets/icon_3d.dart';
+import '../../widgets/premium_header.dart';
+import '../../widgets/premium_nav.dart';
+import '../../widgets/widgets.dart';
+import '../chat/chat_list_screen.dart';
+import '../role_screen.dart';
+import 'about_screen.dart';
+import 'catalog_screen.dart';
+import 'contact_screen.dart';
+import 'home_screen.dart';
+import 'logistics_screen.dart';
+import 'my_orders_screen.dart';
+import 'notifications_screen.dart';
+import 'quote_screen.dart';
+import 'settings_screen.dart';
+import 'supplies_screen.dart';
+
+/// Customer-facing shell.
+///
+/// Presents one of three navigations depending on the window: a bottom bar on
+/// a phone, an icon rail on a tablet, and a labelled sidebar on a desktop-sized
+/// window. The seven destinations and their order are unchanged; only the
+/// chrome around them is new.
 class CustomerShell extends StatefulWidget {
   const CustomerShell({super.key});
 
@@ -44,195 +58,166 @@ class _CustomerShellState extends State<CustomerShell> {
     super.dispose();
   }
 
-  static const _labels = {
-    0: 'GOSST HOME', 1: 'ABOUT', 2: 'LOGISTICS',
-    3: 'SUPPLIES', 4: 'SUPPLY REQUEST', 5: 'PRICE QUOTE', 6: 'CONTACT',
+  // Index-aligned with `_screens`. Kept as index keys so the existing tab
+  // behaviour (and the cart notifier wiring) is untouched.
+  static const _primaryEn = <int, String>{
+    0: 'Home',
+    1: 'About',
+    2: 'Logistics',
+    3: 'Supplies',
+    4: 'Supply request',
+    5: 'Price quote',
+    6: 'Contact',
   };
 
-  static const _labelsAr = {
-    0: 'الرئيسية', 1: 'من نحن', 2: 'الخدمات اللوجستية',
-    3: 'التوريدات والتجارة', 4: 'طلب توريد', 5: 'عرض سعر', 6: 'تواصل معنا',
+  static const _primaryAr = <int, String>{
+    0: 'الرئيسية',
+    1: 'من نحن',
+    2: 'الخدمات اللوجستية',
+    3: 'التوريدات والتجارة',
+    4: 'طلب توريد',
+    5: 'عرض سعر',
+    6: 'تواصل معنا',
+  };
+
+  static const _primaryIcons = <int, IconData>{
+    0: AppIcons.home,
+    1: AppIcons.about,
+    2: AppIcons.logistics,
+    3: AppIcons.supplies,
+    4: AppIcons.catalog,
+    5: AppIcons.quotes,
+    6: AppIcons.contact,
   };
 
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppProvider>();
     final en = !app.isArabic;
+    final labels = en ? _primaryEn : _primaryAr;
 
-    // Build current screen with a Scaffold + AppBar that has the drawer
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: GossColors.navy,
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
+    final primary = <NavDestination>[
+      for (var i = 0; i < _screens.length; i++)
+        NavDestination(
+          id: '$i',
+          label: labels[i]!,
+          icon: _primaryIcons[i]!,
+          // The cart count rides on the supply-request destination, exactly as
+          // it did on the drawer badge before.
+          badge: i == 4 ? app.cartCount : null,
         ),
-        titleSpacing: 0,
-        title: Row(
-          children: [
-            Image.asset('assets/logo.png', width: 38, height: 38),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('GOSST', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  Text(
-                    en ? _labels[_index]! : _labelsAr[_index]!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.8), letterSpacing: 0.5),
-                  ),
-                ],
-              ),
+    ];
+
+    final account = <NavDestination>[
+      NavDestination(
+        id: 'orders',
+        label: en ? 'My orders' : 'طلباتي',
+        icon: AppIcons.orders,
+        tone: IconTone.brand,
+      ),
+      NavDestination(
+        id: 'chat',
+        label: en ? 'Support chat' : 'شات الدعم',
+        icon: AppIcons.chat,
+        tone: IconTone.brand,
+      ),
+      NavDestination(
+        id: 'notifications',
+        label: en ? 'Notifications' : 'الإشعارات',
+        icon: AppIcons.notifications,
+      ),
+      NavDestination(
+        id: 'settings',
+        label: en ? 'Settings' : 'الإعدادات',
+        icon: AppIcons.settings,
+      ),
+      NavDestination(
+        id: 'role',
+        label: en ? 'Switch role' : 'تبديل الحساب',
+        icon: AppIcons.signOut,
+        tone: IconTone.neutral,
+      ),
+    ];
+
+    final content = Column(
+      children: [
+        // A compact 58dp bar. No gradient, no logo block, no oversized title:
+        // the destination name plus a single overflow control.
+        PremiumHeader(
+          title: labels[_index],
+          actions: [
+            IconAction(
+              icon: AppIcons.notifications,
+              tooltip: en ? 'Notifications' : 'الإشعارات',
+              tone: IconTone.primary,
+              onPressed: () => _push(const NotificationsScreen()),
+            ),
+            _OverflowMenu(
+              en: en,
+              onDark: app.isDark,
+              onLang: app.toggleLanguage,
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: en ? 'Notifications' : 'التنبيهات',
-            icon: Badge(
-              isLabelVisible: app.unreadNotifications > 0,
-              backgroundColor: GossColors.red,
-              label: Text('${app.unreadNotifications}'),
-              child: const Icon(Icons.notifications_none, color: Colors.white),
+        Expanded(
+          child: FadeSwitcher(
+            // One constrain on the shared body caps and centres the embedded
+            // screens on a wide window instead of letting them span 1024dp.
+            child: context.constrain(
+              KeyedSubtree(
+                key: ValueKey('customer-tab-$_index'),
+                child: _index < _screens.length
+                    ? _screens[_index]
+                    : _screens.first,
+              ),
             ),
-            onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
-            },
-          ),
-          IconButton(
-            tooltip: en ? 'Your request / cart' : '\u0637\u0644\u0628\u0643 / \u0627\u0644\u0633\u0644\u0629',
-            icon: Badge(
-              isLabelVisible: app.cartCount > 0,
-              backgroundColor: GossColors.red,
-              label: Text('${app.cartCount}'),
-              child: const Icon(Icons.shopping_cart_outlined, color: Colors.white),
-            ),
-            onPressed: () {
-              setState(() => _index = 4);
-              WidgetsBinding.instance.addPostFrameCallback((_) => _cartSignal.value++);
-            },
-          ),
-          PopupMenuButton<String>(
-            tooltip: en ? 'More options' : 'خيارات أكثر',
-            color: GossColors.navy,
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            onSelected: (v) {
-              if (v == 'role') {
-                _switchRole();
-              } else if (v == 'dark') {
-                app.toggleDarkMode();
-              } else if (v == 'lang') {
-                app.toggleLanguage();
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(value: 'role', child: Row(children: [const Icon(Icons.switch_account, color: Colors.white), const SizedBox(width: 8), Text(en ? 'Switch role' : 'تبديل الحساب', style: const TextStyle(color: Colors.white))])),
-              PopupMenuItem(value: 'dark', child: Row(children: [Icon(app.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: Colors.white), const SizedBox(width: 8), Text(en ? 'Toggle dark mode' : 'الوضع الداكن', style: const TextStyle(color: Colors.white))])),
-              PopupMenuItem(value: 'lang', child: Row(children: [const Icon(Icons.translate, color: Colors.white), const SizedBox(width: 8), Text(en ? 'العربية' : 'English', style: const TextStyle(color: Colors.white))])),
-            ],
-          ),
-        ],
-      ),
-      body: _screens[_index],
-      drawer: Drawer(
-        backgroundColor: GossColors.navy,
-        child: SafeArea(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Image.asset('assets/logo.png', width: 44, height: 44),
-                    const SizedBox(width: 10),
-                    Flexible(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('GOSST',
-                              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-                          Text(en ? 'Global Outsourcing Services Trading' : '\u0627\u0644\u062a\u0648\u0631\u064a\u062f\u0627\u062a \u0648\u0627\u0644\u062a\u062c\u0627\u0631\u0629 \u0627\u0644\u062e\u0627\u0631\u062c\u064a\u0629',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Color(0xFFC9D3E0), fontSize: 10)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(color: Colors.white24),
-              _drawerItem(en ? 'Home' : '\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629', Icons.home, 0),
-              _drawerItem(en ? 'About Us' : '\u0645\u0646 \u0646\u062d\u0646', Icons.info, 1),
-              _drawerItem(en ? 'Logistics Services' : 'الخدمات اللوجستية', Icons.local_shipping, 2),
-              _drawerItem(en ? 'Supplies & Trade' : 'التوريدات والتجارة', Icons.inventory, 3),
-              _drawerItem(en ? 'Supply Request' : 'طلب توريد', Icons.storefront, 4),
-              _drawerItem(en ? 'Price Quote' : 'عرض سعر', Icons.request_quote, 5),
-              _drawerItem(en ? 'Contact' : 'تواصل معنا', Icons.mail, 6),
-              const Divider(color: Colors.white24),
-              ListTile(
-                leading: const Icon(Icons.receipt_long, color: Colors.white),
-                title: Text(en ? 'My Orders' : 'طلباتي', style: const TextStyle(color: Colors.white)),
-                subtitle: Text(en ? 'Track requests until delivery' : 'تابع طلباتك حتى التسليم', style: const TextStyle(color: Color(0xFFC9D3E0))),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen()));
-                },
-              ),
-              const Divider(color: Colors.white24),
-              ListTile(
-                leading: const Icon(Icons.headset_mic_outlined, color: GossColors.red),
-                title: Text(en ? 'Support chat' : 'شات خدمة العملاء', style: const TextStyle(color: Colors.white)),
-                subtitle: Text(en ? 'Encrypted end-to-end' : 'مشفّر من طرف لطرف', style: const TextStyle(color: Color(0xFFC9D3E0))),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChatListScreen()));
-                },
-              ),
-              const Divider(color: Colors.white24),
-              ListTile(
-                leading: const Icon(Icons.settings, color: Colors.white),
-                title: Text(en ? 'Settings' : '\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a', style: const TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
-                },
-              ),
-ListTile(
-                leading: const Icon(Icons.switch_account, color: Colors.white),
-                title: Text(en ? 'Switch role' : 'تبديل الحساب', style: const TextStyle(color: Colors.white)),
-                subtitle: Text(en ? 'Back to role selection' : 'العودة لاختيار الدخول', style: const TextStyle(color: Color(0xFFC9D3E0))),
-                onTap: () {
-                  Navigator.pop(context);
-                  _switchRole();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.logout, color: GossColors.red),
-                title: Text(en ? 'Log out' : 'تسجيل الخروج', style: const TextStyle(color: GossColors.red)),
-                subtitle: Text(en ? 'Back to role selection' : 'العودة إلى شاشة اختيار الوضع', style: const TextStyle(color: Color(0xFFC9D3E0))),
-                onTap: () {
-                  Navigator.pop(context);
-                  context.read<AppProvider>().logout();
-                  _switchRole();
-                },
-              ),
-              const SizedBox(height: 4),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
-                child: VersionBadge(compact: true, light: true),
-              ),
-            ],
           ),
         ),
-      ),
+      ],
     );
+
+    return PremiumShellLayout(
+      selectedId: '$_index',
+      secondary: account,
+      brand: _Brand(en: en),
+      navFooter: _ThemeToggle(onDark: app.isDark, onToggle: app.toggleDarkMode),
+      nav: (layout) => PremiumNav(
+        layout: layout,
+        destinations: primary,
+        secondary: account,
+        selectedId: '$_index',
+        onSelected: (id) => _onNav(id, account),
+      ),
+      content: content,
+    );
+  }
+
+  /// Routes a selection. Numeric ids move the tab; the rest push a page or
+  /// perform an action, which is how the drawer's extra entries behaved before.
+  void _onNav(String id, List<NavDestination> account) {
+    final numeric = int.tryParse(id);
+    if (numeric != null) {
+      if (numeric == _index) return;
+      setState(() => _index = numeric);
+      return;
+    }
+
+    switch (id) {
+      case 'orders':
+        _push(const MyOrdersScreen());
+      case 'chat':
+        _push(const ChatListScreen());
+      case 'notifications':
+        _push(const NotificationsScreen());
+      case 'settings':
+        _push(const SettingsScreen());
+      case 'role':
+        _switchRole();
+    }
+  }
+
+  void _push(Widget page) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
   }
 
   void _switchRole() {
@@ -241,26 +226,209 @@ ListTile(
       (route) => false,
     );
   }
+}
 
-  Widget _drawerItem(String label, IconData icon, int index) {
-    final app = context.read<AppProvider>();
-    final active = _index == index;
-    return ListTile(
-      leading: Icon(icon, color: active ? GossColors.red : Colors.white),
-      selected: active,
-      selectedTileColor: Colors.white.withValues(alpha: 0.08),
-      title: Text(label, style: const TextStyle(color: Colors.white)),
-      trailing: index == 4 && app.cartCount > 0
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: const BoxDecoration(color: GossColors.red, shape: BoxShape.circle),
-              child: Text('${app.cartCount}', style: const TextStyle(color: Colors.white, fontSize: 12)),
-            )
-          : null,
-      onTap: () {
-        Navigator.pop(context);
-        setState(() => _index = index);
+/// Compact brand lockup used at the top of the rail and sidebar.
+class _Brand extends StatelessWidget {
+  const _Brand({required this.en});
+
+  final bool en;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Image.asset('assets/logo.png', width: 26, height: 26),
+        const SizedBox(width: Insets.xs),
+        Flexible(
+          child: Text(
+            'GOSST',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: context.headingColor,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Overflow control in the header: language, appearance, account.
+class _OverflowMenu extends StatelessWidget {
+  const _OverflowMenu({
+    required this.en,
+    required this.onDark,
+    required this.onLang,
+  });
+
+  final bool en;
+  final bool onDark;
+  final VoidCallback onLang;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: en ? 'More' : 'المزيد',
+      color: context.raisedColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Corners.md),
+        side: BorderSide(color: context.borderColor),
+      ),
+      icon: Icon(AppIcons.more, color: context.secondaryTextColor),
+      onSelected: (v) {
+        if (v == 'dark') {
+          context.read<AppProvider>().toggleDarkMode();
+        } else if (v == 'lang') {
+          onLang();
+        } else if (v == 'logout') {
+          context.read<AppProvider>().logout();
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const RoleScreen()),
+            (route) => false,
+          );
+        }
       },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'dark',
+          height: 42,
+          child: _MenuRow(
+            icon: onDark ? AppIcons.sun : AppIcons.moon,
+            label: onDark
+                ? (en ? 'Light mode' : 'الوضع الفاتح')
+                : (en ? 'Dark mode' : 'الوضع الداكن'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'lang',
+          height: 42,
+          child: _MenuRow(
+            icon: AppIcons.language,
+            label: en ? 'العربية' : 'English',
+          ),
+        ),
+        PopupMenuItem(
+          value: 'logout',
+          height: 42,
+          child: _MenuRow(
+            icon: AppIcons.signOut,
+            label: en ? 'Switch role' : 'تبديل الحساب',
+            tone: IconTone.danger,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({
+    required this.icon,
+    required this.label,
+    this.tone = IconTone.neutral,
+  });
+
+  final IconData icon;
+  final String label;
+  final IconTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (tone) {
+      IconTone.danger => context.dangerColor,
+      _ => context.bodyColor,
+    };
+    return Row(
+      children: [
+        Icon(icon, size: IconSize.action, color: color, weight: 500),
+        const SizedBox(width: Insets.sm),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: TypeScale.body,
+            fontWeight: FontWeight.w500,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Two-state appearance switch for the rail and sidebar footer, matching the
+/// reference's compact segmented control.
+class _ThemeToggle extends StatelessWidget {
+  const _ThemeToggle({required this.onDark, required this.onToggle});
+
+  final bool onDark;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+
+    return PressableScale(
+      onTap: onToggle,
+      pressedScale: 0.96,
+      child: Container(
+        height: ControlSize.sm,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: context.isDarkMode
+              ? GossColors.darkBg
+              : GossColors.lightSurfaceAlt,
+          borderRadius: BorderRadius.circular(Corners.md),
+          border: Border.all(color: context.borderColor),
+        ),
+        child: Row(
+          children: [
+            _half(
+              context: context,
+              icon: AppIcons.sun,
+              active: !onDark,
+              accent: accent,
+            ),
+            _half(
+              context: context,
+              icon: AppIcons.moon,
+              active: onDark,
+              accent: accent,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _half({
+    required BuildContext context,
+    required IconData icon,
+    required bool active,
+    required Color accent,
+  }) {
+    return Expanded(
+      child: AnimatedContainer(
+        duration: Motion.fast,
+        curve: Motion.entrance,
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active ? accent.withValues(alpha: 0.14) : Colors.transparent,
+          borderRadius: BorderRadius.circular(Corners.sm),
+        ),
+        child: Icon(
+          icon,
+          size: IconSize.inline,
+          weight: active ? 600 : 500,
+          color: active ? accent : context.mutedColor,
+        ),
+      ),
     );
   }
 }

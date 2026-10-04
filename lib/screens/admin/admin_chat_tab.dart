@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../models/chat_models.dart';
 import '../../providers/app_provider.dart';
 import '../../services/chat_store.dart';
@@ -69,9 +70,14 @@ class _AdminChatTabState extends State<AdminChatTab> {
           (en ? 'Closed' : 'مغلقة', closed),
         ];
 
-        return ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
+        return Center(
+          // Caps the conversation list on a 7"/10" tablet; the conversation
+          // rows stay a readable measure instead of spanning the whole panel.
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: context.goss.maxContentWidth),
+            child: ListView(
+              padding: EdgeInsets.all(context.gap(12)),
+              children: [
             for (final section in sections)
               if (section.$2.isNotEmpty) ...[
                 Padding(
@@ -88,7 +94,9 @@ class _AdminChatTabState extends State<AdminChatTab> {
                 for (final c in section.$2) _ChatRow(conversation: c),
                 const SizedBox(height: 12),
               ],
-          ],
+              ],
+            ),
+          ),
         );
       },
     );

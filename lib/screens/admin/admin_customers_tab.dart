@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/admin_provider.dart';
 import '../../app/theme.dart';
+import '../../app/motion.dart';
+import '../../app/responsive.dart';
 import '../../models/models.dart';
 import '../../widgets/widgets.dart';
 
@@ -260,8 +262,10 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
         ? filteredCustomers
         : viewMap;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
+    return FadeSlideIn(
+      child: context.constrain(
+        ListView(
+      padding: EdgeInsets.all(context.goss.pagePadding),
       children: [
         Row(
           children: [
@@ -319,24 +323,31 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Checkbox(
-              value: _selectAll && customersView.length == _selected.length,
-              tristate: false,
-              onChanged: (v) {
-                setState(() {
-                  if (v == true) {
-                    _selected.addAll(customersView.map((e) => e.key));
-                  } else {
-                    _selected.clear();
-                  }
-                  _selectAll = v == true;
-                });
-              },
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Checkbox(
+                  value: _selectAll && customersView.length == _selected.length,
+                  tristate: false,
+                  onChanged: (v) {
+                    setState(() {
+                      if (v == true) {
+                        _selected.addAll(customersView.map((e) => e.key));
+                      } else {
+                        _selected.clear();
+                      }
+                      _selectAll = v == true;
+                    });
+                  },
+                ),
+                Text(en ? 'Select all' : 'تحديد الكل'),
+              ],
             ),
-            Text(en ? 'Select all' : 'تحديد الكل'),
-            const Spacer(),
             if (_selected.isNotEmpty)
               OutlinedButton.icon(
                 onPressed: () => _bulkArchive(app, admin, en),
@@ -348,7 +359,6 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
                     ? (en ? 'Restore' : 'استعادة')
                     : (en ? 'Archive' : 'أرشفة')),
               ),
-            const SizedBox(width: 8),
             if (_selected.isNotEmpty)
               OutlinedButton.icon(
                 onPressed: () => _bulkDelete(app, admin, en),
@@ -358,63 +368,89 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
                 icon: const Icon(Icons.delete_outline, size: 18),
                 label: Text(en ? 'Delete' : 'مسح'),
               ),
-            const SizedBox(width: 8),
             if (_selected.isNotEmpty)
-              Text(
-                '${_selected.length} ${en ? 'selected' : 'محدد'}',
+              AnimatedCount(
+                value: _selected.length,
+                suffix: ' ${en ? 'selected' : 'محدد'}',
                 style: TextStyle(color: context.mutedColor, fontSize: 13),
               ),
           ],
         ),
         const SizedBox(height: 4),
-        ...customersView.map((entry) {
-          final key = entry.key;
-          final requests = entry.value.where(_inRange).toList();
-          final isSel = _selected.contains(key);
-          return Card(
-            child: InkWell(
-              onTap: () {
-                setState(() {
-                  if (_selected.contains(key)) {
-                    _selected.remove(key);
-                  } else {
-                    _selected.add(key);
-                  }
-                });
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Row(
+        FadeSwitcher(
+          child: customersView.isEmpty
+              ? Padding(
+                  key: const ValueKey('customers-empty'),
+                  padding: EdgeInsets.symmetric(vertical: context.gap(32)),
+                  child: Center(
+                    child: Text(
+                      en ? 'No customers yet.' : 'لا يوجد عملاء بعد.',
+                      style: TextStyle(color: context.mutedColor),
+                    ),
+                  ),
+                )
+              : Column(
+                  key: const ValueKey('customers-list'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Checkbox(value: isSel, onChanged: null),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${requests.first.name} \u00b7 ${requests.first.company}',
-                            style: TextStyle(fontWeight: FontWeight.w700, color: context.bodyColor),
+                    ...customersView.map((entry) {
+                      final key = entry.key;
+                      final requests = entry.value.where(_inRange).toList();
+                      final isSel = _selected.contains(key);
+                      return Card(
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              if (_selected.contains(key)) {
+                                _selected.remove(key);
+                              } else {
+                                _selected.add(key);
+                              }
+                            });
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            child: Row(
+                              children: [
+                                Checkbox(value: isSel, onChanged: null),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      FlexibleText(
+                                        '${requests.first.name} \u00b7 ${requests.first.company}',
+                                        style: TextStyle(fontWeight: FontWeight.w700, color: context.bodyColor),
+                                      ),
+                                      FlexibleText(
+                                        '${requests.first.phone}  \u2022  ${en ? 'quotes' : 'عروض'}: ${requests.length}',
+                                        style: TextStyle(color: context.mutedColor, fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  Directionality.of(context) == TextDirection.rtl ? Icons.chevron_left : Icons.chevron_right,
+                                ),
+                              ],
+                            ),
                           ),
-                          Text(
-                            '${requests.first.phone}  \u2022  ${en ? 'quotes' : 'عروض'}: ${requests.length}',
-                            style: TextStyle(color: context.mutedColor, fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Directionality.of(context) == TextDirection.rtl ? Icons.chevron_left : Icons.chevron_right,
-                    ),
+                        ),
+                      );
+                    }),
                   ],
                 ),
-              ),
-            ),
-          );
-        }),
+        ),
         const SizedBox(height: 12),
-        if (_selected.isNotEmpty)
-          ..._buildDetails(context, en, allByCustomer, products, _selected),
+        AnimatedExpand(
+          expanded: _selected.isNotEmpty,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _buildDetails(context, en, allByCustomer, products, _selected),
+          ),
+        ),
       ],
+        ),
+      ),
     );
   }
 
@@ -457,7 +493,11 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  spacing: 8,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
                       r.orderLabel,
@@ -467,9 +507,7 @@ class _AdminCustomersTabState extends State<AdminCustomersTab> {
                         fontSize: 12,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     Text(dateStr, style: TextStyle(color: context.mutedColor, fontSize: 12)),
-                    const Spacer(),
                     Text(requestStatusLabel(r.status, ar: !en), style: TextStyle(
                       color: requestStatusColor(r.status),
                       fontSize: 12,

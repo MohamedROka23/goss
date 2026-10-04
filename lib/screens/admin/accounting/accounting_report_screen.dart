@@ -3,6 +3,8 @@ import 'package:intl/intl.dart' show DateFormat;
 import 'package:provider/provider.dart';
 
 import '../../../app/theme.dart';
+import '../../../app/responsive.dart';
+import '../../../app/motion.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/app_provider.dart';
 import '../../../services/accounting.dart';
@@ -86,10 +88,11 @@ class _AccountingReportScreenState extends State<AccountingReportScreen> {
       appBar: AppBar(
         title: Text(en ? 'Monthly report' : 'التقرير الشهري'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+body: ListView(
+        padding: EdgeInsets.all(context.gap(16)),
         children: [
-          Row(
+          FadeSlideIn(
+            child: Row(
             children: [
               IconButton(
                 icon: const Icon(Icons.chevron_left),
@@ -105,7 +108,8 @@ class _AccountingReportScreenState extends State<AccountingReportScreen> {
                 icon: const Icon(Icons.chevron_right),
                 onPressed: () => setState(() => _month = DateTime(_month.year, _month.month + 1, 1)),
               ),
-            ],
+],
+            ),
           ),
           const SizedBox(height: 8),
 

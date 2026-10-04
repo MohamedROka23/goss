@@ -3,6 +3,8 @@ import 'package:intl/intl.dart' show DateFormat;
 import 'package:provider/provider.dart';
 
 import '../../../app/theme.dart';
+import '../../../app/responsive.dart';
+import '../../../app/motion.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/app_provider.dart';
 import '../../../services/accounting.dart';
@@ -59,10 +61,11 @@ class _AccountingIncomeScreenState extends State<AccountingIncomeScreen> {
         title: Text(en ? 'Income statement' : 'قائمة الدخل'),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(context.gap(16)),
         children: [
           // ── period selector ────────────────────────────────────────────
-          Row(
+          FadeSlideIn(
+            child: Row(
             children: [
               IconButton(
                 icon: const Icon(Icons.chevron_left),
@@ -94,6 +97,7 @@ class _AccountingIncomeScreenState extends State<AccountingIncomeScreen> {
                         }),
               ),
             ],
+            ),
           ),
           const SizedBox(height: 8),
 

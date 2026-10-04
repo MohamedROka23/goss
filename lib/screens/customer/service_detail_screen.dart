@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../app/service_data.dart';
 import 'contact_screen.dart';
 
@@ -97,7 +98,7 @@ class ServiceDetailScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.all(context.gap(16)),
                     decoration: BoxDecoration(
                       color: context.sectionColor,
                       borderRadius: BorderRadius.circular(12),

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/admin_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../widgets/widgets.dart';
 
 class AdminProfitTab extends StatefulWidget {
@@ -40,8 +41,8 @@ class _AdminProfitTabState extends State<AdminProfitTab> {
     final profit = sellTotal - costTotal - _extraExpenses;
     final profitMargin = sellTotal > 0 ? (profit / sellTotal) * 100 : 0.0;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
+return ListView(
+        padding: EdgeInsets.all(context.gap(16)),
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,

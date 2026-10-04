@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/admin_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../models/models.dart';
 import '../../widgets/widgets.dart';
 
@@ -44,8 +45,8 @@ class _AdminPurchasesTabState extends State<AdminPurchasesTab> {
       });
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
+return ListView(
+        padding: EdgeInsets.all(context.gap(16)),
       children: [
         Row(
           children: [

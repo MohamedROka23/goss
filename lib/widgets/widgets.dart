@@ -3,90 +3,187 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+
 import '../app/theme.dart';
+import '../app/icons.dart';
+import '../app/responsive.dart';
+import '../app/motion.dart';
+import '../app/spacing.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../services/export_service.dart';
+
 /// Colour used to paint a request status.
+///
+/// The meanings are unchanged from the original app; only the values moved to
+/// the new system, so a chip reads as part of one palette. Note `delivering`
+/// uses burgundy rather than plain red: it is an active brand state, not an
+/// error, and the two should not look identical at a glance.
 Color requestStatusColor(String status) {
   switch (status) {
     case RequestStatus.accepted:
-      return GossColors.blue;
-    case RequestStatus.preparing:
-      return const Color(0xFFB06A00);
-    case RequestStatus.arriving:
-      return const Color(0xFF7A5BC0);
-    case RequestStatus.delivering:
-      return const Color(0xFFD21F26);
-    case RequestStatus.delivered:
-      return const Color(0xFF1F8A4C);
     case RequestStatus.confirmed:
-      return GossColors.green;
+      return GossColors.statusPending;
+    case RequestStatus.preparing:
+      return GossColors.statusPreparing;
+    case RequestStatus.arriving:
+      return GossColors.statusArriving;
+    case RequestStatus.delivering:
+      return GossColors.statusDelivering;
+    case RequestStatus.delivered:
+      return GossColors.statusDelivered;
     case RequestStatus.rejected:
-      return GossColors.red;
+      return GossColors.statusRejected;
     default:
-      return GossColors.red;
+      return GossColors.statusRejected;
   }
 }
 
-/// Small coloured pill showing a request status, bilingual.
+/// Small status chip.
+///
+/// A low-alpha tint with a hairline edge and readable text, rather than a
+/// saturated solid pill. The label truncates rather than overflows, which
+/// matters for the long Arabic labels inside a narrow order row.
 class RequestStatusChip extends StatelessWidget {
   final String status;
   final bool isArabic;
-  const RequestStatusChip({super.key, required this.status, required this.isArabic});
+  const RequestStatusChip({
+    super.key,
+    required this.status,
+    required this.isArabic,
+  });
 
   @override
   Widget build(BuildContext context) {
     final color = requestStatusColor(status);
+    final isDark = context.isDarkMode;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.xs + 2,
+        vertical: 5,
       ),
-      child: Text(
-        requestStatusLabel(status, ar: isArabic),
-        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.14 : 0.10),
+        borderRadius: BorderRadius.circular(Corners.sm),
+        border: Border.all(
+          color: color.withValues(alpha: isDark ? 0.28 : 0.22),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: Insets.xs - 2),
+          Flexible(
+            child: Text(
+              requestStatusLabel(status, ar: isArabic),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: TextStyle(
+                color: isDark ? color.withValues(alpha: 0.95) : color,
+                fontSize: TypeScale.micro,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.1,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Shows the installed app version and build number.
 /// Horizontal stage-by-stage timeline for an order's journey.
+///
+/// Completed stages sit on the accent colour with a connecting rail; pending
+/// stages are outlined only, which reads as a progression without needing
+/// per-stage labels.
 class RequestStatusTimeline extends StatelessWidget {
   final int step;
   const RequestStatusTimeline({super.key, required this.step});
 
   @override
   Widget build(BuildContext context) {
+    final stages = RequestStatus.stages;
+    final accent = Theme.of(context).colorScheme.primary;
+    final idle = context.borderColor;
+    final activeColor = Theme.of(context).colorScheme.onPrimary;
+
     return Row(
-      children: List.generate(RequestStatus.stages.length, (i) {
-        final done = i <= step;
-        final color = done ? requestStatusColor(RequestStatus.stages[i]) : GossColors.navy2;
-        return Expanded(
-          child: Column(
-            children: [
-              Container(
-                width: 26,
-                height: 26,
+      children: [
+        for (var i = 0; i < stages.length; i++) ...[
+          if (i > 0)
+            // The connector sits between markers and fills once the previous
+            // stage completes, so the line carries the progress too.
+            Expanded(
+              child: Container(
+                height: 2,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: done ? color : GossColors.navy2,
-                  border: Border.all(color: done ? color : GossColors.navy2, width: 2),
+                  color: i <= step ? accent : idle,
+                  borderRadius: BorderRadius.circular(1),
                 ),
-                child: done
-                    ? const Icon(Icons.check, size: 14, color: Colors.white)
-                    : null,
               ),
-            ],
+            ),
+          _TimelineDot(
+            done: i <= step,
+            active: i == step,
+            color: i <= step ? accent : idle,
+            activeGlyphColor: activeColor,
           ),
-        );
-      }),
+        ],
+      ],
     );
   }
 }
 
+class _TimelineDot extends StatelessWidget {
+  const _TimelineDot({
+    required this.done,
+    required this.active,
+    required this.color,
+    required this.activeGlyphColor,
+  });
+
+  final bool done;
+  final bool active;
+  final Color color;
+  final Color activeGlyphColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: Motion.fast,
+      curve: Motion.entrance,
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: done ? color : Colors.transparent,
+        border: Border.all(color: color, width: done ? 0 : 1.5),
+        boxShadow: active
+            ? [BoxShadow(color: color.withValues(alpha: 0.30), blurRadius: 8)]
+            : null,
+      ),
+      child: done
+          ? Icon(
+              AppIcons.success,
+              size: 12,
+              color: activeGlyphColor,
+              weight: 600,
+            )
+          : null,
+    );
+  }
+}
+
+/// Compact build stamp. Deliberately quiet — it is metadata, not content.
 class VersionBadge extends StatelessWidget {
   final bool compact;
   final bool light;
@@ -100,16 +197,28 @@ class VersionBadge extends StatelessWidget {
         final info = snap.data;
         final version = info?.version ?? '1.0.0';
         final build = info?.buildNumber ?? '1';
-        final text = compact ? 'v$version' : 'Version $version ($build)';
-        return Text(
-          'GOSST $text',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: light ? const Color(0xFFC9D3E0) : context.mutedColor,
-            fontSize: compact ? 12 : 13,
-            fontWeight: FontWeight.w600,
-          ),
+        final text = compact ? 'v$version' : 'v$version · $build';
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              AppIcons.info,
+              size: 12,
+              color: light ? GossColors.darkTextMuted : context.mutedColor,
+            ),
+            const SizedBox(width: Insets.xxs + 1),
+            Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: light ? GossColors.darkTextMuted : context.mutedColor,
+                fontSize: TypeScale.micro,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
         );
       },
     );
@@ -131,71 +240,131 @@ class ExportButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isArabic = context.watch<AppProvider>().isArabic;
-    return Row(
+    return Wrap(
+      spacing: Insets.xs,
+      runSpacing: Insets.xs,
       children: [
-        _pill(
-          icon: Icons.picture_as_pdf_outlined,
+        _exportTile(
+          context: context,
+          icon: AppIcons.print,
           label: 'PDF',
-          color: GossColors.red,
-          onTap: () => _run(context,
+          tone: IconTone.danger,
+          onTap: () => _run(
+            context,
+            isArabic: isArabic,
+            job: () => ExportService.exportPdf(
+              title: title,
+              headers: headers,
+              rows: rows,
               isArabic: isArabic,
-              job: () => ExportService.exportPdf(
-                  title: title, headers: headers, rows: rows, isArabic: isArabic),
-              msg: 'PDF'),
+            ),
+            msg: 'PDF',
+          ),
         ),
-        const SizedBox(width: 8),
-        _pill(
-          icon: Icons.table_chart_outlined,
+        _exportTile(
+          context: context,
+          icon: AppIcons.download,
           label: 'Excel',
-          color: const Color(0xFF1A7A3C),
-          onTap: () => _run(context,
+          tone: IconTone.success,
+          onTap: () => _run(
+            context,
+            isArabic: isArabic,
+            job: () => ExportService.exportExcel(
+              sheetName: title,
+              headers: headers,
+              rows: rows,
               isArabic: isArabic,
-              job: () => ExportService.exportExcel(
-                  sheetName: title, headers: headers, rows: rows, isArabic: isArabic),
-              msg: 'Excel'),
+            ),
+            msg: 'Excel',
+          ),
         ),
       ],
     );
   }
 
-  Future<void> _run(BuildContext context,
-      {required bool isArabic, required Future<void> Function() job, required String msg}) async {
+  Future<void> _run(
+    BuildContext context, {
+    required bool isArabic,
+    required Future<void> Function() job,
+    required String msg,
+  }) async {
     try {
       await job();
     } catch (e) {
       if (!context.mounted) return;
       final short = (e.toString().trim());
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(isArabic
-            ? 'تعذر إنشاء ملف $msg. $short'
-            : 'Failed to create the $msg file. $short'),
-        backgroundColor: GossColors.red,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic
+                ? 'تعذر إنشاء ملف $msg. $short'
+                : 'Failed to create the $msg file. $short',
+          ),
+        ),
+      );
     }
   }
 
-  Widget _pill({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
+  /// A compact outlined action consistent with the new button system: 12px
+  /// radius, a hairline border and a tinted glyph rather than a saturated fill.
+  Widget _exportTile({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required IconTone tone,
+    required VoidCallback onTap,
+  }) {
+    final color = switch (tone) {
+      IconTone.danger => context.dangerColor,
+      IconTone.success => context.successColor,
+      _ => Theme.of(context).colorScheme.primary,
+    };
+
+    return PressableScale(
       onTap: onTap,
+      pressedScale: 0.96,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        height: ControlSize.sm - 2,
+        padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(Corners.md),
+          border: Border.all(color: color.withValues(alpha: 0.28)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 15, color: color),
-            const SizedBox(width: 5),
-            Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: color)),
+            Icon(icon, size: IconSize.inline, color: color, weight: 500),
+            const SizedBox(width: Insets.xs - 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: TypeScale.caption,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+/// The application's standard action button.
+///
+/// A rounded rectangle at a 12px radius rather than a pill, available in three
+/// visual weights so a screen can express hierarchy without reaching for
+/// `ElevatedButton` directly.
+enum ButtonVariant {
+  /// Filled accent — the single primary action in a view.
+  primary,
+
+  /// Outlined with an accent label — secondary actions.
+  secondary,
+
+  /// Flat tonal fill — tertiary or repeated actions.
+  tonal,
 }
 
 class GossButton extends StatelessWidget {
@@ -204,73 +373,159 @@ class GossButton extends StatelessWidget {
   final Color? color;
   final bool isSmall;
   final IconData? icon;
+  final ButtonVariant variant;
+  final bool expand;
 
   const GossButton({
     super.key,
     required this.label,
     this.onPressed,
-    this.color = GossColors.blue,
+    this.color,
     this.isSmall = false,
     this.icon,
+    this.variant = ButtonVariant.primary,
+    this.expand = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: Colors.white,
-        padding: EdgeInsets.symmetric(
-          horizontal: isSmall ? 14 : 22,
-          vertical: isSmall ? 10 : 14,
-        ),
-        textStyle: TextStyle(
-          fontWeight: FontWeight.w700,
-          fontSize: isSmall ? 13 : 15,
-          letterSpacing: 0.04,
-        ),
+    final enabled = onPressed != null;
+    final accent = color ?? Theme.of(context).colorScheme.primary;
+
+    // A custom colour on a primary button implies intent, so it stays filled;
+    // otherwise the requested variant decides.
+    final style = switch (variant) {
+      ButtonVariant.primary => ElevatedButton.styleFrom(
+        backgroundColor: accent,
+        foregroundColor: context.isDarkMode
+            ? const Color(0xFF061018)
+            : Colors.white,
+        disabledBackgroundColor: accent.withValues(alpha: 0.35),
+        disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: isSmall ? 14 : 18),
-            SizedBox(width: isSmall ? 4 : 8),
-          ],
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+      ButtonVariant.secondary => ElevatedButton.styleFrom(
+        backgroundColor: Colors.transparent,
+        foregroundColor: accent,
+        disabledForegroundColor: accent.withValues(alpha: 0.35),
+        side: BorderSide(color: accent.withValues(alpha: enabled ? 0.4 : 0.15)),
+      ),
+      ButtonVariant.tonal => ElevatedButton.styleFrom(
+        backgroundColor: accent.withValues(alpha: 0.12),
+        foregroundColor: accent,
+        disabledForegroundColor: accent.withValues(alpha: 0.30),
+        elevation: 0,
+      ),
+    };
+
+    final height =
+        (isSmall ? ControlSize.sm : ControlSize.md) * context.goss.density;
+
+    return Opacity(
+      opacity: enabled ? 1 : 0.75,
+      child: SizedBox(
+        width: expand ? double.infinity : null,
+        child: ElevatedButton(
+          onPressed: onPressed,
+          style: style.copyWith(
+            minimumSize: WidgetStatePropertyAll(Size(0, height)),
+            padding: WidgetStatePropertyAll(
+              EdgeInsets.symmetric(
+                horizontal:
+                    (isSmall ? Insets.sm + 2 : Insets.lg) *
+                    context.goss.density,
+                vertical: 0,
+              ),
+            ),
+            elevation: const WidgetStatePropertyAll(0),
+            textStyle: WidgetStatePropertyAll(
+              TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: isSmall ? TypeScale.caption : TypeScale.body,
+                letterSpacing: 0.1,
+              ),
+            ),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(Corners.md),
+              ),
             ),
           ),
+          child: Row(
+            mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: isSmall ? 15 : IconSize.inline, weight: 500),
+                SizedBox(width: isSmall ? Insets.xs - 2 : Insets.xs),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Section heading.
+///
+/// Now a compact 16px label with a hairline rule rather than a 28px display
+/// face, which is what lets a long content page keep its vertical budget for
+/// content.
+class SectionTitle extends StatelessWidget {
+  final String title;
+  final bool isArabic;
+  final Widget? trailing;
+
+  const SectionTitle({
+    super.key,
+    required this.title,
+    required this.isArabic,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Insets.sm),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: TypeScale.sectionTitle,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.2,
+                color: context.headingColor,
+              ),
+              textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: Insets.xs),
+            trailing!,
+          ],
         ],
       ),
     );
   }
 }
 
-class SectionTitle extends StatelessWidget {
-  final String title;
-  final bool isArabic;
-
-  const SectionTitle({super.key, required this.title, required this.isArabic});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: 28,
-        fontWeight: FontWeight.w800,
-        color: context.headingColor,
-      ),
-      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
-    );
-  }
-}
-
+/// A compact page introduction.
+///
+/// This replaces the old 96px gradient hero. It is now a slim title band: one
+/// line of type on a tinted surface with a hairline bottom border, capped at a
+/// fixed small height so the content beneath starts immediately. The gradient
+/// is gone — the brand colour now comes from the accent rule and the title.
 class PageHero extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -285,41 +540,74 @@ class PageHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final direction = isArabic ? TextDirection.rtl : TextDirection.ltr;
+    final accent = Theme.of(context).colorScheme.primary;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [GossColors.navy, GossColors.navy2],
-        ),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        border: Border(bottom: BorderSide(color: context.borderColor)),
       ),
-      child: Column(
-        crossAxisAlignment: isArabic ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              height: 1.4,
-            ),
-            textDirection: direction,
+      child: context.constrain(
+        Padding(
+          // Deliberately tight: roughly 64-72dp total including the subtitle.
+          padding: EdgeInsets.symmetric(
+            horizontal: context.goss.pagePadding,
+            vertical: Insets.sm + 2,
           ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              color: Color(0xFFC9D3E0),
-              fontSize: 15,
-              height: 1.6,
-            ),
-            textDirection: direction,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  // A short accent bar reads as branding without the weight of
+                  // a large coloured block.
+                  Container(
+                    width: 3,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  Expanded(
+                    child: FlexibleText(
+                      title,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: TypeScale.pageTitle,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                        color: context.headingColor,
+                      ),
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+                ],
+              ),
+              if (subtitle.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(
+                    top: 3,
+                    start: Insets.sm + 3,
+                  ),
+                  child: FlexibleText(
+                    subtitle,
+                    maxLines: 2,
+                    style: TextStyle(
+                      fontSize: TypeScale.caption,
+                      height: 1.35,
+                      color: context.mutedColor,
+                    ),
+                    textAlign: TextAlign.start,
+                  ),
+                ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -341,40 +629,109 @@ class ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(Insets.md * context.goss.density),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              isArabic ? product.nameAr : product.nameEn,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.headingColor),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // A small tinted glyph anchors the card without the weight of
+                // an image placeholder.
+                IconContainer(
+                  icon: AppIcons.products,
+                  tone: IconTone.primary,
+                  size: 32,
+                  iconSize: 16,
+                ),
+                const SizedBox(width: Insets.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FlexibleText(
+                        isArabic ? product.nameAr : product.nameEn,
+                        maxLines: 2,
+                        style: TextStyle(
+                          fontSize: TypeScale.cardTitle,
+                          height: 1.3,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.1,
+                          color: context.headingColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      FlexibleText(
+                        isArabic ? product.descAr : product.descEn,
+                        maxLines: 2,
+                        style: TextStyle(
+                          fontSize: TypeScale.caption,
+                          height: 1.35,
+                          color: context.mutedColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              isArabic ? product.descAr : product.descEn,
-              style: TextStyle(color: context.mutedColor, fontSize: 13),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            const SizedBox(height: Insets.sm),
+            Container(height: 1, color: context.borderColor),
+            const SizedBox(height: Insets.sm),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Price is the figure a buyer scans for, so it leads the row.
+                Expanded(
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: product.price, end: product.price),
+                    duration: Motion.normal,
+                    curve: Motion.entrance,
+                    builder: (context, value, _) => Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          value.toStringAsFixed(2),
+                          textDirection: TextDirection.ltr,
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
+                            color: accent,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          '${isArabic ? 'ج.م' : 'EGP'} / ${product.unit}',
+                          textDirection: TextDirection.ltr,
+                          style: TextStyle(
+                            fontSize: TypeScale.micro,
+                            fontWeight: FontWeight.w500,
+                            color: context.mutedColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (onAdd != null)
+                  GossButton(
+                    label: isArabic ? 'إضافة' : 'Add',
+                    icon: AppIcons.add,
+                    onPressed: onAdd,
+                    isSmall: true,
+                    variant: ButtonVariant.secondary,
+                  ),
+              ],
             ),
-            const SizedBox(height: 10),
-            Text(
-              '${isArabic ? '\u062c.\u0645' : 'EGP'} ${product.price.toStringAsFixed(2)} / ${product.unit}',
-              textDirection: TextDirection.ltr,
-              style: const TextStyle(color: GossColors.red, fontWeight: FontWeight.w800, fontSize: 18),
-            ),
-            if (onAdd != null) ...[
-              const SizedBox(height: 10),
-              GossButton(
-                label: isArabic ? '\u0623\u0636\u0641 \u0644\u0644\u0637\u0644\u0628' : 'Add to request',
-                onPressed: onAdd,
-                isSmall: true,
-              ),
-            ],
-            ?child,
+            if (child != null) child!,
           ],
         ),
       ),
@@ -408,8 +765,9 @@ class _AnimatedLogoState extends State<AnimatedLogo> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       for (var i = 1; i <= _frameCount; i++) {
-        final asset =
-            AssetImage('assets/anim_logo/frame_${i.toString().padLeft(2, '0')}.png');
+        final asset = AssetImage(
+          'assets/anim_logo/frame_${i.toString().padLeft(2, '0')}.png',
+        );
         unawaited(precacheImage(asset, context));
       }
     });

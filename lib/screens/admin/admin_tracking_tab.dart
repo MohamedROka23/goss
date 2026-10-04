@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../providers/admin_provider.dart';
 import '../../app/theme.dart';
+import '../../app/motion.dart';
+import '../../app/responsive.dart';
 import '../../models/models.dart';
 import '../../widgets/widgets.dart';
 
@@ -103,17 +105,20 @@ class _AdminTrackingTabState extends State<AdminTrackingTab> {
       return dateOk && searchOk;
     }).toList();
 
-    return RefreshIndicator(
+    return FadeSlideIn(
+      child: RefreshIndicator(
       onRefresh: () => admin.loadRequests(app.token!),
       child: requests.isEmpty
-              ? ListView(
+              ? context.constrain(
+                  ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.all(context.goss.pagePadding),
                   children: [
                     const SizedBox(height: 100),
                     const Icon(Icons.route_outlined, size: 64, color: GossColors.navy2),
                     const SizedBox(height: 16),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      padding: EdgeInsets.symmetric(horizontal: context.gap(32)),
                       child: Text(
                         en
                             ? 'No orders to track yet. New requests will appear here with their live stages.'
@@ -123,10 +128,12 @@ class _AdminTrackingTabState extends State<AdminTrackingTab> {
                       ),
                     ),
                   ],
+                ),
                 )
-              : ListView(
+              : context.constrain(
+                  ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(context.goss.pagePadding),
                   children: [
 Text(
                       en
@@ -156,17 +163,23 @@ Text(
                     ),
                     if (_showArchive) ...[
                       const SizedBox(height: 8),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Checkbox(
-                            value: _allSelected(filtered),
-                            onChanged: (_) => _toggleAll(filtered),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Checkbox(
+                                value: _allSelected(filtered),
+                                onChanged: (_) => _toggleAll(filtered),
+                              ),
+                              Text(en ? 'Select all' : 'تحديد الكل'),
+                            ],
                           ),
-                          Text(en ? 'Select all' : 'تحديد الكل'),
-                          const Spacer(),
                           if (_selected.isNotEmpty) ...[
-                            Text('${_selected.length}'),
-                            const SizedBox(width: 8),
+                            AnimatedCount(value: _selected.length),
                             OutlinedButton.icon(
                               onPressed: () => _bulkDelete(app, admin, en),
                               style: OutlinedButton.styleFrom(foregroundColor: GossColors.red),
@@ -211,32 +224,43 @@ Text(
                       ],
                     ),
                     const SizedBox(height: 12),
-                    if (filtered.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: Text(
-                            _search.text.trim().isNotEmpty
-                                ? (en ? 'No orders match your search.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u062a\u0637\u0627\u0628\u0642 \u0628\u062d\u062b\u0643.')
-                                : (filterStr != null
-                                    ? (en ? 'No orders on this date.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u062a\u0627\u0631\u064a\u062e.')
-                                    : (en ? 'No orders to show.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a.')),
-                            style: TextStyle(color: context.mutedColor),
-                          ),
-                        ),
-                      ),
-                    ...filtered.map((r) => _trackingCard(context, en, r,
-                        showCheck: _showArchive,
-                        selected: _selected.contains(r.id),
-                        onToggle: () => setState(() {
-                          if (_selected.contains(r.id)) {
-                            _selected.remove(r.id);
-                          } else {
-                            _selected.add(r.id);
-                          }
-                        }))),
+                    FadeSwitcher(
+                      child: filtered.isEmpty
+                          ? Padding(
+                              key: const ValueKey('tracking-empty'),
+                              padding: EdgeInsets.symmetric(vertical: context.gap(24)),
+                              child: Center(
+                                child: Text(
+                                  _search.text.trim().isNotEmpty
+                                      ? (en ? 'No orders match your search.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u062a\u0637\u0627\u0628\u0642 \u0628\u062d\u062b\u0643.')
+                                      : (filterStr != null
+                                          ? (en ? 'No orders on this date.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u062a\u0627\u0631\u064a\u062e.')
+                                          : (en ? 'No orders to show.' : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0637\u0644\u0628\u0627\u062a.')),
+                                  style: TextStyle(color: context.mutedColor),
+                                ),
+                              ),
+                            )
+                          : Column(
+                              key: const ValueKey('tracking-list'),
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: filtered
+                                  .map((r) => _trackingCard(context, en, r,
+                                      showCheck: _showArchive,
+                                      selected: _selected.contains(r.id),
+                                      onToggle: () => setState(() {
+                                        if (_selected.contains(r.id)) {
+                                          _selected.remove(r.id);
+                                        } else {
+                                          _selected.add(r.id);
+                                        }
+                                      })))
+                                  .toList(),
+                            ),
+                    ),
                   ],
                 ),
+                ),
+      ),
     );
   }
 
@@ -289,18 +313,28 @@ Text(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${r.name} \u00b7 ${r.company.isEmpty ? (en ? 'No company' : '\u0628\u062f\u0648\u0646 \u0634\u0631\u0643\u0629') : r.company}',
+                      FlexibleText(
+                        '${r.name} · ${r.company.isEmpty ? (en ? 'No company' : 'بدون شركة') : r.company}',
+                        maxLines: 2,
                         style: TextStyle(fontWeight: FontWeight.w700, color: context.bodyColor),
                       ),
-                      Text(
-                        '${en ? 'Order' : '\u0637\u0644\u0628'} ${r.orderLabel} \u00b7 ${_dateStr(r.createdAt)}',
+                      FlexibleText(
+                        '${en ? 'Order' : 'طلب'} ${r.orderLabel} · ${_dateStr(r.createdAt)}',
+                        maxLines: 1,
                         style: TextStyle(color: context.mutedColor, fontSize: 12),
                       ),
                     ],
                   ),
                 ),
-                RequestStatusChip(status: r.status, isArabic: !en),
+                const SizedBox(width: 8),
+                // Flexible so the chip shrinks its own label instead of forcing
+                // the title column past the card edge on a 320dp phone.
+                Flexible(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: RequestStatusChip(status: r.status, isArabic: !en),
+                  ),
+                ),
               ],
             ),
             const Divider(height: 20),

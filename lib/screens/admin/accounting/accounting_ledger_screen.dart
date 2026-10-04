@@ -3,6 +3,7 @@ import 'package:intl/intl.dart' show DateFormat;
 import 'package:provider/provider.dart';
 
 import '../../../app/theme.dart';
+import '../../../app/responsive.dart';
 import '../../../providers/admin_provider.dart';
 import '../../../providers/app_provider.dart';
 import '../../../services/accounting.dart';
@@ -77,8 +78,8 @@ class _AccountingLedgerScreenState extends State<AccountingLedgerScreen> {
       appBar: AppBar(
         title: Text(en ? 'General ledger' : 'دفتر الأستاذ العام'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+body: ListView(
+        padding: EdgeInsets.all(context.gap(16)),
         children: [
           // ── period selector ─────────────────────────────────────────────
           Row(

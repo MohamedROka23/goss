@@ -31,16 +31,75 @@ service cloud.firestore {
 
     // No register code was ever allowed to grant admin: self-registration is
     // provisioning zero (a bare delegate). Everything else comes from a super.
-    match /products/{id} {
+
+    // A product must always live inside a section that actually exists.
+    //
+    // Without this, a write can name a category that was never created (or a
+    // typo'd id) and the product then shows up under "All" while being
+    // unreachable from its own section — the section filter compares
+    // `product.category == category.id`, so a mismatch silently hides it.
+    //
+    // `get()` costs one document read per validation, which is acceptable for
+    // a catalogue write and is what makes the guarantee enforceable rather than
+    // merely conventional.
+    function hasValidCategory() {
+      return 'category' in request.resource.data &&
+        request.resource.data.category is string &&
+        request.resource.data.category.size() > 0 &&
+        exists(/databases/$(database)/documents/categories/$(request.resource.data.category));
+    }
+
+    // True while the given account still exists as a team member AND still
+    // carries the `chat` permission. Used to prune support-device keys of
+    // members who have been removed or had `chat` revoked — their key must stop
+    // being a valid recipient for newly sealed conversations.
+    function stillChatStaff(uid) {
+      return exists(/databases/$(database)/documents/admins/$(uid)) &&
+        (get(/databases/$(database)/documents/admins/$(uid)).data.role in
+          ['admin', 'super']) &&
+        get(/databases/$(database)/documents/admins/$(uid))
+            .data.permissions is list &&
+        'chat' in get(/databases/$(database)/documents/admins/$(uid))
+            .data.permissions;
+    }
+
+    // Public catalogue. Supplier cost prices MUST NOT live here: this rule
+    // grants unauthenticated read of the whole document, and Firestore rules
+    // cannot redact individual fields. Costs live in /product_costs/{id} below,
+    // which only the quotes panel can read.
+match /products/{id} {
       allow read: if true;
-      // Catalogue management lives inside the Price quotes (Quotes) panel, so
-      // the same permission that opens the panel also guards its writes.
-      allow create, update, delete: if hasPerm('quotes');
+      // Catalogue management lives inside the Price quotes (Quotes) panel, so the
+      // same permission that opens the panel also guards its writes.
+      //
+      // `hasValidCategory()` is mandatory: a product can only be created or
+      // moved into a section that really exists, so nothing can end up orphaned
+      // and invisible in the section filter.
+      allow create: if hasPerm('quotes') &&
+        !('costPrice' in request.resource.data) &&
+        hasValidCategory();
+      allow update: if hasPerm('quotes') &&
+        !('costPrice' in request.resource.data) &&
+        hasValidCategory();
+      allow delete: if hasPerm('quotes');
+    }
+
+    // Supplier cost + margin, split out of /products so the public catalogue
+    // read above never exposes the shop's buy-in price.
+    match /product_costs/{id} {
+      allow read, write: if hasPerm('quotes');
     }
 
     match /categories/{id} {
       allow read: if true;
-      allow create, update, delete: if hasPerm('quotes');
+      // A section must carry both display names, otherwise the catalogue filter
+      // renders a blank entry that nobody can pick.
+      allow create, update: if hasPerm('quotes') &&
+        request.resource.data.en is string &&
+        request.resource.data.en.size() > 0 &&
+        request.resource.data.ar is string &&
+        request.resource.data.ar.size() > 0;
+      allow delete: if hasPerm('quotes');
     }
 
     match /notifications/{id} {
@@ -80,23 +139,83 @@ service cloud.firestore {
         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'registerCode', 'approved', 'uid'
         ]);
+      // REVOKE (tombstone). Removing a member does not delete the document: it
+      // rewrites the role to `revoked`, which is in no allow-list above and so
+      // strips every permission the moment this write lands — the device that
+      // was signed in re-reads this same document and signs itself out. Keeping
+      // the row also keeps the e-mail reserved so the address cannot be
+      // re-registered by someone else.
+      //
+      // It is deliberately a one-way door: the source role must not already be
+      // `revoked` and the target must be exactly `revoked`, so no rule anywhere
+      // can move an account back off the tombstone (restoring it is a fresh
+      // provisioning through `create`). Clearing the permission list in the same
+      // write guarantees a tombstone can never carry live panels.
+      allow update: if (hasRole('super') || hasPerm('team')) &&
+        resource.data.role != 'revoked' &&
+        request.resource.data.role == 'revoked' &&
+        request.resource.data.permissions.size() == 0;
       allow delete: if hasRole('super') ||
         (hasPerm('team') && resource.data.role != 'super');
     }
 
     match /requests/{id} {
+      // A customer may only ever CREATE a request in its initial state. Without
+      // the field/state pins below, a modified client could submit an order
+      // already marked confirmed/archived/converted, with a forged orderNo
+      // (bypassing the counter) or a forged uid.
+      //
+      // The membership tests use `!('field' in data)`, NOT `data.field == false`:
+      // reading an absent field is a runtime ERROR in Firestore rules, and an
+      // error anywhere in the `&&` chain denies the whole write — which would
+      // stop customers from submitting any order at all.
       allow create: if signedIn() &&
-        request.resource.data.customerId == request.auth.uid;
+        request.resource.data.customerId == request.auth.uid &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == 'new' &&
+        !('archived' in request.resource.data) &&
+        !('converted' in request.resource.data) &&
+        request.resource.data.keys().hasOnly([
+          'company', 'name', 'phone', 'email', 'notes', 'items', 'status',
+          'type', 'customerId', 'origin', 'destination', 'orderNo', 'vat',
+          'createdAt', 'uid'
+        ]) &&
+        request.resource.data.items is list &&
+        request.resource.data.items.size() <= 200;
       // Team reads only with the requests panel; customers only their own.
       allow read: if (isAdmin() && hasPerm('requests')) ||
         (signedIn() && resource.data.customerId == request.auth.uid);
-      // Customers may only touch their own request and can never re-point it
-      // at another account (customerId is immutable).
-      allow update: if isAdmin() ||
-        (signedIn() &&
-          resource.data.customerId == request.auth.uid &&
-          request.resource.data.customerId == resource.data.customerId);
-      allow delete: if isAdmin();
+      // Team manages the full lifecycle. A team member with the requests panel
+      // can do the same on the HTTP backend, so the panel permission — not the
+      // bare role — is the gate here too.
+      allow update: if isAdmin() && hasPerm('requests');
+      // Customers may only (a) answer the delivery question and (b) archive
+      // their own order. Everything else — items, prices, VAT, orderNo,
+      // converted, createdAt — is admin-only, enforced over the before/after
+      // diff so a hand-crafted REST call cannot bypass the client checks in
+      // firestore_backend.dart.
+      //
+      // The accepted source states mirror my_orders_screen exactly: the answer
+      // buttons appear once the order is out for delivery or already delivered.
+      // Answering from any earlier stage is refused, so a customer can no longer
+      // jump a `new` order straight to `confirmed`.
+      //
+      // `!(x in list)` is NOT negated membership here: Firestore's `!` binds
+      // tighter than `in`, so it must be written as
+      // `!(resource.data.status in [...])` explicitly, which is what is used
+      // below. Answering the same question twice is refused by the frozen
+      // check, so the terminal state cannot be rewritten.
+      allow update: if signedIn() &&
+        resource.data.customerId == request.auth.uid &&
+        request.resource.data.customerId == resource.data.customerId &&
+        request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['status', 'archived']) &&
+        (!(request.resource.data.diff(resource.data)
+              .affectedKeys().hasAny(['status'])) ||
+          (resource.data.status in ['delivering', 'delivered'] &&
+            !(resource.data.status in ['confirmed', 'rejected']) &&
+            request.resource.data.status in ['confirmed', 'rejected']));
+      allow delete: if isAdmin() && hasPerm('requests');
     }
 
     match /purchases/{id} {
@@ -136,7 +255,10 @@ service cloud.firestore {
     }
 
     match /admin_tokens/{uid} {
-      allow read, write: if isAdmin();
+      // Bound to the caller (same as customer_tokens below). Without this, any
+      // account with a team role could overwrite another device's push token.
+      allow read: if isAdmin();
+      allow write: if isAdmin() && uid == request.auth.uid;
     }
 
     // E2E support chat (شات الدعم المشفّر). All message bodies in Firestore
@@ -161,6 +283,12 @@ service cloud.firestore {
         uid == request.auth.uid &&
         request.resource.data.publicB64 is string &&
         request.resource.data.publicB64.size() <= 2048;
+      // Without this, a removed member's public key stayed in the collection
+      // forever and every future conversation was sealed to their device. A
+      // member may drop their own enrollment; a team member may prune any
+      // device that no longer holds the `chat` permission.
+      allow delete: if (signedIn() && uid == request.auth.uid) ||
+        (hasPerm('chat') && !stillChatStaff(uid));
     }
 
     match /chat_conversations/{id} {
@@ -205,21 +333,35 @@ service cloud.firestore {
     }
 
     match /chat_conversations/{id}/messages/{msgId} {
+      function conversation() {
+        return get(/databases/$(database)/documents/chat_conversations/$(id));
+      }
+      // Read access is re-derived on every request instead of trusting the
+      // static participants list: a participant stamped at creation time who
+      // has since been removed from the team (or had `chat` revoked) must lose
+      // access to both the ciphertext and the key.
+      //
+      // `exists` is a PROPERTY on a document snapshot, not a function — calling
+      // it as `exists()` makes the whole expression an error, which Firestore
+      // treats as "deny", silently cutting the customer out of their own chat.
       function mayRead() {
         return hasPerm('chat') ||
           (signedIn() &&
-            get(/databases/$(database)/documents/chat_conversations/$(id))
-                .data.participants is list &&
-            request.auth.uid in
-              get(/databases/$(database)/documents/chat_conversations/$(id))
-                  .data.participants);
+            conversation().exists &&
+            (request.auth.uid == conversation().data.customerId ||
+              (stillChatStaff(request.auth.uid) &&
+                conversation().data.participants is list &&
+                request.auth.uid in conversation().data.participants)));
       }
       allow read: if mayRead();
       allow create: if mayRead() &&
-        get(/databases/$(database)/documents/chat_conversations/$(id))
-            .data.status == 'open' &&
+        conversation().data.status == 'open' &&
         request.resource.data.senderUid == request.auth.uid &&
-        request.resource.data.senderRole in ['customer', 'admin'] &&
+        // The role is derived from the live team record, never accepted from
+        // the client — otherwise a customer could stamp its own message
+        // `admin` and have it render as an official support reply.
+        request.resource.data.senderRole ==
+          (stillChatStaff(request.auth.uid) ? 'admin' : 'customer') &&
         request.resource.data.kind in ['text', 'image'] &&
         request.resource.data.data is string &&
         request.resource.data.data.size() <= 1048576 &&

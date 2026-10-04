@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../services/backend_manager.dart';
 import '../../widgets/widgets.dart';
 
@@ -19,7 +20,7 @@ class SettingsScreen extends StatelessWidget {
         title: Text(en ? 'Settings' : '\u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a'),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(context.gap(16)),
         children: [
           if (BackendManager.firebaseAvailable)
             Padding(
@@ -48,7 +49,7 @@ class SettingsScreen extends StatelessWidget {
             ),
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(context.gap(16)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -86,7 +87,7 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 12),
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(context.gap(16)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -124,7 +125,7 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 12),
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(context.gap(16)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

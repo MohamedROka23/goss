@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:provider/provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../providers/admin_provider.dart';
 import '../../providers/app_provider.dart';
+import '../../services/biometric_service.dart';
 import '../../services/fcm_service.dart';
 import 'quick_sign_in_setup_sheet.dart';
 
@@ -45,12 +46,12 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
   }
 
   Future<void> _checkBio() async {
-    var supported = false;
-    try {
-      supported = await LocalAuthentication().canCheckBiometrics;
-    } catch (_) {}
+    // Real device state, not just `canCheckBiometrics`: that returns true on a
+    // phone whose sensor has nothing enrolled, so the toggle would offer a
+    // prompt that cannot succeed.
+    final capability = await biometrics.probe();
     if (!mounted) return;
-    setState(() => _bioAvailable = supported);
+    setState(() => _bioAvailable = capability == BiometricCapability.available);
   }
 
   Future<void> _saveQuickLock() async {
@@ -100,14 +101,11 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
 
   Future<void> _bootQuickSignIn() async {
     final app = context.read<AppProvider>();
-    var bio = false;
-    try {
-      bio = await LocalAuthentication().canCheckBiometrics;
-    } catch (_) {}
+    final capability = await biometrics.probe();
     final enrolled = await app.quickSignInArmed();
     if (!mounted) return;
     setState(() {
-      _qsBioSupported = bio;
+      _qsBioSupported = capability == BiometricCapability.available;
       _qsEnrolled = enrolled;
     });
   }
@@ -215,7 +213,7 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(en ? 'Enable account lock' : 'تفعيل قفل الحساب'),
+                  title: FlexibleText(en ? 'Enable account lock' : 'تفعيل قفل الحساب'),
                   value: _quickLockEnabled,
                   onChanged: _saving
                       ? null
@@ -227,10 +225,19 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
                 if (_quickLockEnabled) ...[
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(en ? 'Fingerprint / face unlock' : 'الفتح بالبصمة / الوش'),
+                    title: FlexibleText(en ? 'Fingerprint / face unlock' : 'الفتح بالبصمة / الوش'),
                     subtitle: _bioAvailable
                         ? null
-                        : Text(en ? 'Not available on this device' : 'غير متاح على هذا الجهاز'),
+                        : Text(
+                            BiometricService.messageFor(
+                                  biometrics.capability,
+                                  isArabic: !en,
+                                ) ??
+                                (en
+                                    ? 'Not available on this device'
+                                    : 'غير متاح على هذا الجهاز'),
+                            style: const TextStyle(fontSize: 12),
+                          ),
                     value: _bio && _bioAvailable,
                     onChanged: _saving
                         ? null
@@ -313,23 +320,31 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Row(
+                  // AdaptiveRow, not Row: two icon+label buttons side by side leave each only
+                  // ~140dp, and a button's internal Row cannot shrink its own
+                  // label, so at 320dp with a 1.3 text scale the pair overflows
+                  // by ~14dp. Stacking on narrow screens gives each button the
+                  // full width; wider devices still get them side by side.
+                  AdaptiveRow(
+                    spacing: context.gap(8),
+                    minChildWidth: 150,
                     children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          icon: const Icon(Icons.edit_outlined, size: 18),
-                          label: Text(en ? 'Change' : 'تغيير'),
-                          onPressed: _manageQuickSignIn,
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: FlexibleText(
+                          en ? 'Change' : 'تغيير',
+                          maxLines: 1,
                         ),
+                        onPressed: _manageQuickSignIn,
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(backgroundColor: GossColors.red),
-                          icon: const Icon(Icons.delete_outline, size: 18),
-                          label: Text(en ? 'Disable' : 'تعطيل'),
-                          onPressed: _disableQuickSignIn,
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(backgroundColor: GossColors.red),
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: FlexibleText(
+                          en ? 'Disable' : 'تعطيل',
+                          maxLines: 1,
                         ),
+                        onPressed: _disableQuickSignIn,
                       ),
                     ],
                   ),
@@ -381,9 +396,21 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: GossColors.navy),
-        const SizedBox(width: 8),
-        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        Icon(icon, size: 20 * context.goss.density, color: GossColors.navy),
+        SizedBox(width: 8 * context.goss.density),
+        // Flexible: a section title must truncate rather than push the row
+        // past the card/page width on a narrow phone at a large text scale.
+        Flexible(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 16 * context.goss.density,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
       ],
     );
   }

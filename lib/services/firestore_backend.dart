@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 
 import '../models/models.dart';
@@ -50,6 +49,19 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
+  Stream<List<ProductCategory>> watchCategories() {
+    return _db
+        .collection('categories')
+        .orderBy('order')
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => ProductCategory.fromJson({...d.data(), 'id': d.id}))
+              .toList(),
+        );
+  }
+
+  @override
   Future<void> addCategory(
     String token,
     String id,
@@ -67,9 +79,42 @@ class FirestoreBackend implements GossBackend {
   @override
   Future<List<Product>> fetchProducts() async {
     final snap = await _db.collection('products').orderBy('createdAt').get();
+    final costs = await _costsFor(snap.docs.map((d) => d.id).toList());
     return snap.docs
-        .map((d) => Product.fromJson({...d.data(), 'id': d.id}))
+        .map(
+          (d) => Product.fromJson({
+            ...d.data(),
+            'id': d.id,
+            if (costs.containsKey(d.id)) 'costPrice': costs[d.id],
+          }),
+        )
         .toList();
+  }
+
+  /// Supplier costs live in their own collection: /products is world-readable
+  /// (the customer catalogue), and Firestore rules cannot redact a single field
+  /// from a granted read. Returns an empty map for anyone without the quotes
+  /// permission, which is the correct result for a customer — they never see
+  /// cost figures.
+  ///
+  /// The collection is fetched whole rather than with an `in` query: Firestore
+  /// caps a disjunction at 30 values, and each document is a single number, so
+  /// a full read is cheaper than paginating the catalogue.
+  Future<Map<String, double>> _costsFor(List<String> ids) async {
+    if (ids.isEmpty) return {};
+    final wanted = ids.toSet();
+    final out = <String, double>{};
+    try {
+      final snaps = await _db.collection('product_costs').get();
+      for (final d in snaps.docs) {
+        if (!wanted.contains(d.id)) continue;
+        final v = (d.data()['costPrice'] as num?)?.toDouble();
+        if (v != null) out[d.id] = v;
+      }
+    } catch (_) {
+      // Permission denied (a customer): no costs. Not an error.
+    }
+    return out;
   }
 
   @override
@@ -78,23 +123,49 @@ class FirestoreBackend implements GossBackend {
         .collection('products')
         .orderBy('createdAt')
         .snapshots()
-        .map(
-          (snap) => snap.docs
-              .map((d) => Product.fromJson({...d.data(), 'id': d.id}))
-              .toList(),
-        );
+        .asyncMap((snap) async {
+          final ids = snap.docs.map((d) => d.id).toList();
+          final costs = await _costsFor(ids);
+          return snap.docs
+              .map(
+                (d) => Product.fromJson({
+                  ...d.data(),
+                  'id': d.id,
+                  if (costs.containsKey(d.id)) 'costPrice': costs[d.id],
+                }),
+              )
+              .toList();
+        });
   }
 
   @override
   Future<Product> saveProduct(String token, Map<String, dynamic> data) async {
     final id = data['id'];
+    final cost = (data['costPrice'] as num?)?.toDouble() ?? 0;
+
+    // A product must always belong to a real section. The deployed rules
+    // reject a write whose `category` does not exist, which would otherwise
+    // surface as an opaque permission error; checking here gives a clear
+    // message and stops an orphan being created in the first place.
+    final category = (data['category'] as String?)?.trim() ?? '';
+    if (category.isEmpty) {
+      throw ArgumentError(
+        'Pick a section for this product. A product cannot be saved without one.',
+      );
+    }
+    final catDoc = await _db.collection('categories').doc(category).get();
+    if (!catDoc.exists) {
+      throw ArgumentError(
+        'That section no longer exists. Reload the sections and pick another.',
+      );
+    }
+
     if (id == null) {
       final doc = _db.collection('products').doc();
       final payload = <String, dynamic>{
-        'category': data['category'] ?? 'office',
+        'category': category,
         'unit': data['unit'] ?? 'unit',
         'price': (data['price'] as num?)?.toDouble() ?? 0,
-        'costPrice': (data['costPrice'] as num?)?.toDouble() ?? 0,
         'stock': (data['stock'] as num?)?.toDouble() ?? 0,
         'nameEn': data['nameEn'] ?? '',
         'nameAr': data['nameAr'] ?? '',
@@ -103,13 +174,13 @@ class FirestoreBackend implements GossBackend {
         'createdAt': FieldValue.serverTimestamp(),
       };
       await doc.set(payload);
-      return Product.fromJson({...payload, 'id': doc.id});
+      await _db.collection('product_costs').doc(doc.id).set({'costPrice': cost});
+      return Product.fromJson({...payload, 'id': doc.id, 'costPrice': cost});
     } else {
       final payload = <String, dynamic>{
         'category': data['category'] ?? 'office',
         'unit': data['unit'] ?? 'unit',
         'price': (data['price'] as num?)?.toDouble() ?? 0,
-        'costPrice': (data['costPrice'] as num?)?.toDouble() ?? 0,
         'stock': (data['stock'] as num?)?.toDouble() ?? 0,
         'nameEn': data['nameEn'] ?? '',
         'nameAr': data['nameAr'] ?? '',
@@ -117,13 +188,17 @@ class FirestoreBackend implements GossBackend {
         'descAr': data['descAr'] ?? '',
       };
       await _db.collection('products').doc(id).update(payload);
-      return Product.fromJson({...payload, 'id': id});
+      await _db.collection('product_costs').doc(id).set({'costPrice': cost});
+      return Product.fromJson({...payload, 'id': id, 'costPrice': cost});
     }
   }
 
   @override
   Future<void> deleteProduct(String token, String id) async {
     await _db.collection('products').doc(id).delete();
+    try {
+      await _db.collection('product_costs').doc(id).delete();
+    } catch (_) {}
   }
 
   @override
@@ -134,7 +209,10 @@ class FirestoreBackend implements GossBackend {
   }) async {
     final categoriesRef = _db.collection('categories');
     final productsRef = _db.collection('products');
+    final costsRef = _db.collection('product_costs');
 
+    // Categories are written first so every product can point at a section that
+    // already exists, which is what the rules require.
     for (var i = 0; i < categories.length; i += 490) {
       final batch = _db.batch();
       var order = i;
@@ -149,20 +227,39 @@ class FirestoreBackend implements GossBackend {
       await batch.commit();
     }
 
+    // Any product whose category is not in this import and not already stored
+    // would be orphaned, so it is reported instead of being written.
+    final known = <String>{
+      ...categories.map((c) => c['id'] as String),
+      ...(await categoriesRef.get()).docs.map((d) => d.id),
+    };
+    final orphans = products
+        .where((p) => !known.contains((p['category'] ?? '').toString()))
+        .toList();
+    if (orphans.isNotEmpty) {
+      throw ArgumentError(
+        '${orphans.length} product(s) have no valid section and were not '
+        'imported. First: ${orphans.first['nameEn'] ?? orphans.first['id']}',
+      );
+    }
+
     for (var i = 0; i < products.length; i += 490) {
       final batch = _db.batch();
       for (final p in products.skip(i).take(490)) {
-        batch.set(productsRef.doc(p['id'] as String), {
-          'category': p['category'] ?? 'office',
+        final id = p['id'] as String;
+        batch.set(productsRef.doc(id), {
+          'category': p['category'] ?? '',
           'unit': p['unit'] ?? 'unit',
           'price': (p['price'] as num?)?.toDouble() ?? 0,
-          'costPrice': (p['costPrice'] as num?)?.toDouble() ?? 0,
           'stock': (p['stock'] as num?)?.toDouble() ?? 0,
           'nameEn': p['nameEn'] ?? '',
           'nameAr': p['nameAr'] ?? '',
           'descEn': p['descEn'] ?? '',
           'descAr': p['descAr'] ?? '',
           'createdAt': FieldValue.serverTimestamp(),
+        });
+        batch.set(costsRef.doc(id), {
+          'costPrice': (p['costPrice'] as num?)?.toDouble() ?? 0,
         });
       }
       await batch.commit();
@@ -177,10 +274,14 @@ class FirestoreBackend implements GossBackend {
         password: password,
       );
       final uid = cred.user?.uid ?? 'firebase-admin';
-      // A deleted member is fully blocked: after sign-in, confirm the admins
-      // document actually exists. If it is gone (or Firestore refuses to let
-      // us read it) the auth session is revoked immediately and login fails —
-      // a deleted account can never reach the admin panels.
+      // A removed member is fully blocked. After sign-in we re-read the admins
+      // document, which is the single source of truth for "is still on the
+      // team". Three ways to fail closed:
+      //   - the read is denied or the document is gone,
+      //   - the document exists but is a `revoked` tombstone (removed member),
+      //   - the document exists but carries no active role.
+      // In every case the auth session is revoked immediately so a removed
+      // account can never hold a signed-in session, not even briefly.
       DocumentSnapshot snap;
       try {
         snap = await _db.collection('admins').doc(uid).get();
@@ -189,11 +290,16 @@ class FirestoreBackend implements GossBackend {
         await _auth.signOut();
         throw Exception('This account has been deactivated');
       }
-      if (!snap.exists || snap.data() == null) {
+      final data = snap.data();
+      if (!snap.exists || data == null) {
         await _auth.signOut();
         throw Exception('This account has been deactivated');
       }
-      final data = snap.data() as Map<String, dynamic>;
+      final role = (data as Map<String, dynamic>)['role']?.toString() ?? '';
+      if (!AdminRole.active.contains(role)) {
+        await _auth.signOut();
+        throw Exception('This account has been deactivated');
+      }
       _lastServerProfile =
           AdminUser.fromJson({...data, 'id': uid, 'email': email.trim()});
       return uid;
@@ -210,15 +316,32 @@ class FirestoreBackend implements GossBackend {
     } catch (_) {}
   }
 
+  /// Confirms an e-mail/password pair belongs to a CURRENT team member.
+  ///
+  /// This is the credential check behind quick sign-in and the password-change
+  /// sheet, so it must apply exactly the same membership test as
+  /// [loginAdmin] — otherwise a removed member keeps a working credential on a
+  /// device that never re-runs the full sign-in path.
   @override
   Future<bool> verifyAdminCredentials(String email, String password) async {
     try {
-      // Re-auth of the same team member: same identity, tokens refreshed, the
-      // app's in-memory session is left untouched on success.
-      await _auth.signInWithEmailAndPassword(
+      final cred = await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
+      final uid = cred.user?.uid;
+      if (uid == null) return false;
+      final snap = await _db.collection('admins').doc(uid).get();
+      final data = snap.data();
+      if (!snap.exists || data == null) {
+        await _auth.signOut();
+        return false;
+      }
+      final role = data['role']?.toString() ?? '';
+      if (!AdminRole.active.contains(role)) {
+        await _auth.signOut();
+        return false;
+      }
       return true;
     } catch (_) {
       return false;
@@ -270,6 +393,7 @@ class FirestoreBackend implements GossBackend {
     final data = await _db.collection('admins').orderBy('createdAt').get();
     return data.docs
         .map((d) => AdminUser.fromJson({...d.data(), 'id': d.id}))
+        .where((u) => AdminRole.active.contains(u.role))
         .toList();
   }
 
@@ -279,6 +403,20 @@ class FirestoreBackend implements GossBackend {
       if (!snap.exists) return null;
       return AdminUser.fromJson({...snap.data()!, 'id': snap.id});
     });
+  }
+
+  @override
+  Stream<List<AdminUser>> watchAdmins({String token = ''}) {
+    return _db
+        .collection('admins')
+        .orderBy('createdAt')
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => AdminUser.fromJson({...d.data(), 'id': d.id}))
+              .where((u) => AdminRole.active.contains(u.role))
+              .toList(),
+        );
   }
 
   @override
@@ -346,24 +484,71 @@ class FirestoreBackend implements GossBackend {
     });
   }
 
+  /// Removes a member from the team.
+  ///
+  /// Two layers, and BOTH must land for the account to be truly gone:
+  ///
+  /// 1. The Firestore document is rewritten into a `revoked` tombstone rather
+  ///    than deleted. That single write strips every permission immediately
+  ///    (the rules grant nothing to a role outside admin/super), lets the
+  ///    removed member's own still-signed-in device detect the change and sign
+  ///    itself out, and keeps the e-mail reserved so the address cannot be
+  ///    re-registered by anyone else. It is a one-way door: no rule can restore
+  ///    it, so only a fresh provisioning can bring that address back.
+  ///
+  /// 2. Best-effort: ask the server to disable AND delete the Firebase Auth
+  ///    record, so the raw e-mail/password stops working even against a
+  ///    different client. This depends on the server being reachable, so step 1
+  ///    carries the guarantee on its own; the returned warning tells the caller
+  ///    when the credential may still be live.
   @override
-  Future<void> deleteAdmin(String token, String id) async {
-    // 1) Remove the Firestore document (denies rules-level access).
-    await _db.collection('admins').doc(id).delete();
-    // 2) Best-effort: ask the server to hard-delete the Firebase Auth user
-    //    so the email/password can never be used again. Fails silently if
-    //    the server is unreachable (defense-in-depth only).
+  Future<({bool authDeleted, String? warning})> deleteAdmin(
+    String token,
+    String id,
+  ) async {
+    // 1) Revoke: role outside every allow-list + empty permission list.
+    final ref = _db.collection('admins').doc(id);
+    final snap = await ref.get();
+    if (snap.exists) {
+      await ref.update({
+        'role': AdminRole.revoked,
+        'permissions': <String>[],
+        'revokedAt': FieldValue.serverTimestamp(),
+      });
+    } else {
+      await ref.set({
+        'role': AdminRole.revoked,
+        'permissions': <String>[],
+        'revokedAt': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    // 2) Best-effort hard-delete of the Firebase Auth user.
+    var authDeleted = true;
+    String? warning;
     try {
       final baseUrl = await BackendSettings.loadBaseUrl();
       final res = await http.post(
         Uri.parse('$baseUrl/api/firestore/delete-auth-user'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({'uid': id}),
       );
       if (res.statusCode != 200) {
-        debugPrint('[deleteAdmin] auth delete returned ${res.statusCode}');
+        authDeleted = false;
+        warning =
+            'تم إلغاء الوصول، لكن تعطيل بيانات الدخول لم يكتمل (السيرفر ${res.statusCode}). '
+            'الحساب لن يستطيع الوصول لأي لوحة.';
       }
-    } catch (_) {}
+    } catch (_) {
+      authDeleted = false;
+      warning =
+          'تم إلغاء الوصول، لكن تعطيل بيانات الدخول لم يكتمل (السيرفر غير متاح). '
+          'الحساب لن يستطيع الوصول لأي لوحة.';
+    }
+    return (authDeleted: authDeleted, warning: warning);
   }
 
   @override
@@ -417,6 +602,20 @@ class FirestoreBackend implements GossBackend {
     } catch (_) {
       return [];
     }
+  }
+
+  @override
+  Stream<List<CustomerRequest>> watchMyRequests(String customerId) {
+    return _db
+        .collection('requests')
+        .where('customerId', isEqualTo: customerId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => CustomerRequest.fromJson({...d.data(), 'id': d.id}))
+              .toList(),
+        );
   }
 
   @override
@@ -530,6 +729,19 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
+  Stream<List<Purchase>> watchPurchases({String token = ''}) {
+    return _db
+        .collection('purchases')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => Purchase.fromJson({...d.data(), 'id': d.id}))
+              .toList(),
+        );
+  }
+
+  @override
   Future<List<PriceUpdateNotification>> fetchNotifications() async {
     final snap = await _db
         .collection('notifications')
@@ -632,6 +844,19 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
+  Stream<List<Expense>> watchExpenses({String token = ''}) {
+    return _db
+        .collection('expenses')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => Expense.fromJson({...d.data(), 'id': d.id}))
+              .toList(),
+        );
+  }
+
+  @override
   Future<Expense> saveExpense(String token, Map<String, dynamic> data) async {
     final doc = _db.collection('expenses').doc();
     final payload = <String, dynamic>{
@@ -682,6 +907,19 @@ class FirestoreBackend implements GossBackend {
   }
 
   @override
+  Stream<List<JournalEntry>> watchJournal({String token = ''}) {
+    return _db
+        .collection('journal')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => JournalEntry.fromJson({...d.data(), 'id': d.id}))
+              .toList(),
+        );
+  }
+
+  @override
   Future<JournalEntry> saveJournalEntry(
     String token,
     Map<String, dynamic> data,
@@ -716,6 +954,19 @@ class FirestoreBackend implements GossBackend {
     return snap.docs
         .map((d) => Payment.fromJson({...d.data(), 'id': d.id}))
         .toList();
+  }
+
+  @override
+  Stream<List<Payment>> watchPayments({String token = ''}) {
+    return _db
+        .collection('payments')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => Payment.fromJson({...d.data(), 'id': d.id}))
+              .toList(),
+        );
   }
 
   @override

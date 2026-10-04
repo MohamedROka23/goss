@@ -366,11 +366,11 @@ class ExportService {
     bool isArabic = false,
   }) async {
     final wb = Excel.createExcel();
-    // remove default sheet
-    if (wb.sheets.isNotEmpty) {
-      final defaultSheet = wb.sheets.keys.first;
-      wb.delete(defaultSheet);
-    }
+    // Reuse the default sheet instead of deleting it: the `excel` package
+    // does not fully remove a deleted sheet from workbook.xml, which leaves a
+    // stray empty tab and orphaned relationships in the output.
+    final firstSheet = wb.sheets.keys.first;
+    if (firstSheet != sheetName) wb.rename(firstSheet, sheetName);
     final sheet = wb[sheetName];
 
     final navyHex = ExcelColor.fromHexString('FF0C2340');

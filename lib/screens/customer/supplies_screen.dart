@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../widgets/widgets.dart';
 import 'catalog_screen.dart';
 
@@ -54,7 +55,7 @@ class SuppliesScreen extends StatelessWidget {
             isArabic: !en,
           ),
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(context.gap(24)),
             child: Column(
               children: [
                 Text(
@@ -70,7 +71,7 @@ class SuppliesScreen extends StatelessWidget {
                     child: Card(
                       margin: EdgeInsets.zero,
                       child: Padding(
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.all(context.gap(16)),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

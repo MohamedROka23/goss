@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../models/chat_models.dart';
 import '../../providers/app_provider.dart';
 import '../../security/app_security.dart';
@@ -186,15 +187,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
               ),
             );
           }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
-            itemCount: items.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (context, i) {
-              final c = items[i];
-              return Card(
-                margin: EdgeInsets.zero,
-                elevation: 0.5,
+          return Center(
+            // Caps the list on a 7"/10" tablet so conversation cards keep a
+            // comfortable measure rather than spanning the whole panel.
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: context.goss.maxContentWidth),
+              child: ListView.separated(
+                padding: EdgeInsets.fromLTRB(
+                  context.gap(12),
+                  context.gap(8),
+                  context.gap(12),
+                  88,
+                ),
+                itemCount: items.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, i) {
+                  final c = items[i];
+                  return Card(
+                    margin: EdgeInsets.zero,
+                    elevation: 0.5,
                 child: ListTile(
                   leading: const CircleAvatar(
                     child: Icon(Icons.headset_mic_outlined),
@@ -261,6 +272,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 ),
               );
             },
+              ),
+            ),
           );
         },
       ),

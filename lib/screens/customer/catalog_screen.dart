@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
+import '../../app/motion.dart';
 import '../../models/models.dart';
 import '../../widgets/widgets.dart';
 import 'my_orders_screen.dart';
@@ -146,7 +148,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
             onRefresh: () => app.loadProducts(),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(context.gap(16)),
               child: Column(
                 children: [
                   _filterBar(context, en),
@@ -274,7 +276,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(context.gap(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

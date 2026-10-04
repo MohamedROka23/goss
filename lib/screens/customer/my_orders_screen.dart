@@ -4,6 +4,7 @@ import 'package:intl/intl.dart' show DateFormat;
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../models/models.dart';
 import '../../services/export_service.dart';
 import '../../widgets/widgets.dart';
@@ -231,12 +232,14 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${r.name} \u00b7 ${r.company.isEmpty ? (en ? 'No company' : '\u0628\u062f\u0648\u0646 \u0634\u0631\u0643\u0629') : r.company}',
+                      FlexibleText(
+                        '${r.name} · ${r.company.isEmpty ? (en ? 'No company' : 'بدون شركة') : r.company}',
+                        maxLines: 2,
                         style: TextStyle(fontWeight: FontWeight.w700, color: context.bodyColor),
                       ),
-                      Text(
-                        '${r.orderLabel} \u00b7 ${_dateStr(r.createdAt)}',
+                      FlexibleText(
+                        '${r.orderLabel} · ${_dateStr(r.createdAt)}',
+                        maxLines: 1,
                         style: TextStyle(
                           color: GossColors.navy,
                           fontWeight: FontWeight.w700,
@@ -246,65 +249,72 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                     ],
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: isQuote ? GossColors.blue.withValues(alpha: 0.12) : GossColors.green.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        isQuote ? (en ? 'Quote' : 'عرض سعر') : (en ? 'Supply' : 'طلب توريد'),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: isQuote ? GossColors.blue : GossColors.green,
-                        ),
-                      ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // The badges and action buttons get their own full-width line:
+            // sharing a Row with the title left them only the leftover width,
+            // and a status chip plus two icon buttons cannot fit in that
+            // remainder on a 320dp phone at a 1.3 text scale. A Wrap on its own
+            // row drops them onto a second line instead of overflowing.
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              alignment: WrapAlignment.start,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isQuote ? GossColors.blue.withValues(alpha: 0.12) : GossColors.green.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    isQuote ? (en ? 'Quote' : 'عرض سعر') : (en ? 'Supply' : 'طلب توريد'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: isQuote ? GossColors.blue : GossColors.green,
                     ),
-                    const SizedBox(width: 6),
-                    RequestStatusChip(status: r.status, isArabic: !en),
-                    const SizedBox(width: 4),
-                    if (isQuote)
-                      IconButton(
-                        tooltip: en ? 'Print quote as PDF' : 'طباعة عرض السعر PDF',
-                        icon: const Icon(Icons.picture_as_pdf_outlined, size: 20, color: GossColors.red),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: _acting
-                            ? null
-                            : () async {
-                          setState(() => _acting = true);
-                          try {
-                            await ExportService.exportPriceQuote(r, isArabic: !en);
-                          } catch (_) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content: Text(en
-                                    ? 'Could not generate the PDF. Try again.'
-                                    : 'تعذر إنشاء الملف PDF. حاول مرة أخرى.'),
-                                backgroundColor: GossColors.red,
-                              ));
-                            }
-                          } finally {
-                            if (mounted) setState(() => _acting = false);
-                          }
-                        },
-                      ),
-                    IconButton(
-                      tooltip: r.archived
-                          ? (en ? 'Restore from archive' : 'استعادة من الأرشيف')
-                          : (en ? 'Archive order' : 'أرشفة الطلب'),
-                      icon: Icon(
-                        r.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
-                        size: 18,
-                        color: context.mutedColor,
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _acting ? null : () => _toggleArchive(app, en, r),
-                    ),
-                  ],
+                  ),
+                ),
+                RequestStatusChip(status: r.status, isArabic: !en),
+                if (isQuote)
+                  IconButton(
+                    tooltip: en ? 'Print quote as PDF' : 'طباعة عرض السعر PDF',
+                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 20, color: GossColors.red),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _acting
+                        ? null
+                        : () async {
+                      setState(() => _acting = true);
+                      try {
+                        await ExportService.exportPriceQuote(r, isArabic: !en);
+                      } catch (_) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(en
+                                ? 'Could not generate the PDF. Try again.'
+                                : 'تعذر إنشاء الملف PDF. حاول مرة أخرى.'),
+                            backgroundColor: GossColors.red,
+                          ));
+                        }
+                      } finally {
+                        if (mounted) setState(() => _acting = false);
+                      }
+                    },
+                  ),
+                IconButton(
+                  tooltip: r.archived
+                      ? (en ? 'Restore from archive' : 'استعادة من الأرشيف')
+                      : (en ? 'Archive order' : 'أرشفة الطلب'),
+                  icon: Icon(
+                    r.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
+                    size: 18,
+                    color: context.mutedColor,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _acting ? null : () => _toggleArchive(app, en, r),
                 ),
               ],
             ),

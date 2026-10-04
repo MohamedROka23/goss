@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_provider.dart';
 import '../../app/theme.dart';
+import '../../app/responsive.dart';
 import '../../widgets/widgets.dart';
 
 class AboutScreen extends StatelessWidget {
@@ -24,7 +25,7 @@ class AboutScreen extends StatelessWidget {
             isArabic: !en,
           ),
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(context.gap(24)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -126,7 +127,7 @@ class AboutScreen extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(context.gap(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -158,7 +159,7 @@ class AboutScreen extends StatelessWidget {
               child: Image.asset(image, fit: BoxFit.cover),
             ),
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(context.gap(16)),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

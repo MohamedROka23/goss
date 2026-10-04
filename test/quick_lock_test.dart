@@ -24,7 +24,7 @@ void main() {
     expect(app.quickLockBio, isFalse);
   });
 
-  test('enableQuickLock stores the hashed PIN, not the raw PIN', () async {
+  test('enableQuickLock keeps the PIN verifier out of plain prefs', () async {
     SharedPreferences.setMockInitialValues({});
     final app = await _freshApp();
     await app.enableQuickLock(bio: false, pin: '1234');
@@ -34,13 +34,24 @@ void main() {
     expect(app.quickLockPinHash, isNotEmpty);
     expect(app.quickLockPinHash, isNot('1234'));
 
+    // The verifier lives only in the secure store. Mirroring it into
+    // SharedPreferences exposed it to anything that can read an app backup.
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('goss-quicklock-pin'), app.quickLockPinHash);
-    expect(prefs.getString('goss-quicklock-pin'), isNot('1234'));
+    expect(prefs.getString('goss-quicklock-pin'), isNull);
+    expect(prefs.getString('goss-quicklock-pin'), isNot(app.quickLockPinHash));
 
     expect(app.verifyQuickLockPin('1234'), isTrue);
     expect(app.verifyQuickLockPin('0000'), isFalse);
     expect(app.verifyQuickLockPin(''), isFalse);
+  });
+
+  test('enableQuickLock wipes a PIN hash a previous build left in prefs', () async {
+    SharedPreferences.setMockInitialValues({'goss-quicklock-pin': 'legacy-hash'});
+    final app = await _freshApp();
+    await app.enableQuickLock(bio: false, pin: '5678');
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('goss-quicklock-pin'), isNull);
   });
 
   test('markQuickLocked persists the locked flag and gate is exposed', () async {

@@ -66,11 +66,35 @@ class ChatStore {
   }
 
   /// All enrolled team devices (public keys). Used to wrap new conversations.
+  ///
+  /// The result is intersected with the live `admins` collection: a key whose
+  /// member has been deleted, demoted, or had the `chat` permission revoked is
+  /// NOT a valid recipient. Without this, sealing a new conversation handed its
+  /// key to every device that was ever enrolled, including devices belonging to
+  /// people who have since left the team.
   static Future<List<Map<String, String>>> staffKeys() async {
     try {
       final snap = await _db.collection('chat_staff_keys').get();
+      if (snap.docs.isEmpty) return [];
+      final live = await _db.collection('admins').get();
+      final current = <String>{};
+      for (final doc in live.docs) {
+        final d = doc.data();
+        final role = d['role']?.toString() ?? '';
+        final perms = d['permissions'];
+        if ((role == 'admin' || role == 'super') &&
+            perms is List &&
+            perms.contains('chat')) {
+          current.add(doc.id);
+        }
+      }
+      final stale = <String>[];
       final out = <Map<String, String>>[];
       for (final doc in snap.docs) {
+        if (!current.contains(doc.id)) {
+          stale.add(doc.id);
+          continue;
+        }
         final d = doc.data();
         final pub = d['publicB64']?.toString() ?? '';
         if (pub.isEmpty) continue;
@@ -79,6 +103,12 @@ class ChatStore {
           'keyId': d['keyId']?.toString() ?? ChatCrypto.keyIdOf(pub),
           'publicB64': pub,
         });
+      }
+      // Drop the keys of departed members so they stop being collected at all.
+      for (final uid in stale) {
+        try {
+          await _db.collection('chat_staff_keys').doc(uid).delete();
+        } catch (_) {}
       }
       return out;
     } catch (_) {
